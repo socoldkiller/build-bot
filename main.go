@@ -181,7 +181,7 @@ func HelpOutput() {
 func main() {
 	ctx := context.Background()
 
-	conn, _, err := websocket.Dial(ctx, "ws://127.0.0.1:3001/?access_token=napcat", nil)
+	conn, _, err := websocket.Dial(ctx, GlobalCfg.URL, nil)
 	if err != nil {
 		log.Fatal("dial error:", err)
 	}
@@ -195,7 +195,7 @@ func main() {
 			continue
 		}
 
-		if (body.UserID != 0 || body.GroupID != 0) && strings.HasPrefix(body.RawMessage, "大鱼鱼") {
+		if (body.UserID != 0 || body.GroupID != 0) && strings.HasPrefix(body.RawMessage, GlobalCfg.Prefix) {
 			var tokens []string
 			if tokens = strings.Fields(body.RawMessage); len(tokens) < 2 || tokens[1] != "judge" {
 				continue
