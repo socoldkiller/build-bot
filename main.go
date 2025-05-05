@@ -200,7 +200,6 @@ func main() {
 				continue
 			}
 
-			outputChan := make(chan error)
 			go func() {
 				name, err := memfdCreate("output")
 				if err != nil {
@@ -208,7 +207,6 @@ func main() {
 				}
 				output := outputMessage(body.RawMessage, name)
 				err = cat.send(body.GroupID, body.UserID, output)
-				outputChan <- err
 				ErrOutput("send error", err)
 			}()
 			err := cat.send(body.GroupID, body.UserID, "building...")
