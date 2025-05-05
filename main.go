@@ -199,13 +199,14 @@ func main() {
 			if tokens = strings.Fields(body.RawMessage); len(tokens) < 2 || tokens[1] != "judge" {
 				continue
 			}
+			rawMessage := body.Message[0].Data.Text
 
 			go func() {
 				name, err := memfdCreate("output")
 				if err != nil {
 					return
 				}
-				output := outputMessage(body.RawMessage, name)
+				output := outputMessage(rawMessage, name)
 				err = cat.send(body.GroupID, body.UserID, output)
 				ErrOutput("send error", err)
 			}()
