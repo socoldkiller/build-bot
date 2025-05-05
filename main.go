@@ -10,7 +10,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"time"
 )
 
 type BuildMessage struct {
@@ -212,16 +211,8 @@ func main() {
 				outputChan <- err
 				ErrOutput("send error", err)
 			}()
-
-			select {
-			case <-outputChan:
-
-			case <-time.After(100 * time.Millisecond):
-				err := cat.send(body.GroupID, body.UserID, "building...")
-				ErrOutput("send error", err)
-				<-outputChan
-
-			}
+			err := cat.send(body.GroupID, body.UserID, "building...")
+			ErrOutput("send error", err)
 		}
 
 	}
