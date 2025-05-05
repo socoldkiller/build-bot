@@ -1,0 +1,11 @@
+
+
+version: '3.8'
+
+services:
+  build-bot:
+    image: build-bot
+    container_name: build-bot
+    network_mode: host
+    volumes:
+      - $PWD/config.yaml:/app/config.yaml
