@@ -94,11 +94,8 @@ func goCodeRun(sourceCode string, outputFile string) string {
 		err    error
 	)
 
-	sourceFile, err := memfdCreate("main1.go")
-
-	if err != nil {
-		return ""
-	}
+	sourceFile := "main.go"
+	defer os.Remove(sourceFile)
 
 	err = os.WriteFile(sourceFile, []byte(sourceCode), 0655)
 	if err != nil {
