@@ -7,6 +7,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 	"log"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -86,6 +87,65 @@ func cppCodeRun(sourceCode string, outputFile string) string {
 
 }
 
+func goCodeRun(sourceCode string, outputFile string) string {
+	var (
+		stdout bytes.Buffer
+		stderr bytes.Buffer
+		err    error
+	)
+
+	sourceFile, err := memfdCreate("main1.go")
+
+	if err != nil {
+		return ""
+	}
+
+	err = os.WriteFile(sourceFile, []byte(sourceCode), 0655)
+	if err != nil {
+		return ""
+	}
+
+	r := CmdRunner{
+		cmd:  "go",
+		args: []string{"build", "-o", outputFile, sourceFile},
+	}
+
+	err = r.Run(nil, &stdout, &stderr)
+	buildMsg := judgeOutput(err, stdout.String(), stderr.String())
+
+	stdout.Reset()
+	stderr.Reset()
+
+	r = CmdRunner{
+		cmd: executeFileName(outputFile),
+	}
+
+	err = r.Run(nil, &stdout, &stderr)
+
+	output := judgeOutput(err, stdout.String(), stderr.String())
+	if strings.Contains(output, "no such file or directory ") || strings.Contains(output, "exec format error") {
+		return buildMsg
+	}
+	return output
+
+}
+
+func pyCodeRun(sourceCode string, outputFile string) string {
+	var (
+		stdout bytes.Buffer
+		stderr bytes.Buffer
+		stdin  = strings.NewReader(sourceCode)
+		err    error
+	)
+	r := CmdRunner{
+		cmd: "python3",
+	}
+
+	err = r.Run(stdin, &stdout, &stderr)
+	output := judgeOutput(err, stdout.String(), stderr.String())
+	return output
+}
+
 func outputMessage(raw string, outputFileName string) string {
 	msg, err := parseMessage(raw)
 	if err != nil {
@@ -98,8 +158,10 @@ func outputMessage(raw string, outputFileName string) string {
 		output = cppCodeRun(msg.SourceCode, outputFileName)
 
 	case "py", "python3", "python":
+		output = pyCodeRun(msg.SourceCode, outputFileName)
 
 	case "go":
+		output = goCodeRun(msg.SourceCode, outputFileName)
 
 	case "rust":
 
