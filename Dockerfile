@@ -14,5 +14,6 @@ COPY --from=builder /app/build-bot /app/build-bot
 
 RUN apk add python3 gcc go g++ musl-dev
 
+WORKDIR /app
 
-CMD /app/build-bot
+CMD ./build-bot
