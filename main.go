@@ -7,81 +7,10 @@ import (
 	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 	"log"
-	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
-
-func execCommand(stdin string, cmd string, args ...string) string {
-	var (
-		stdout bytes.Buffer
-		stderr bytes.Buffer
-	)
-
-	runner := exec.Command(cmd, args...)
-	runner.Stdin = strings.NewReader(stdin)
-	runner.Stdout = &stdout
-	runner.Stderr = &stderr
-	err := runner.Run()
-
-	buildErrMsg := stderr.String()
-	runner = exec.Command("./output")
-	runner.Stdout = &stdout
-	runner.Stderr = &stderr
-
-	err = runner.Run()
-	if err != nil {
-		if buildErrMsg != "" {
-			return buildErrMsg
-		}
-		return err.Error()
-	}
-
-	if stderr.String() != "" {
-		return stderr.String()
-	}
-
-	return stdout.String()
-
-}
-
-func PyExecCommand(stdin string, cmd string, args ...string) string {
-	var (
-		stdout bytes.Buffer
-		stderr bytes.Buffer
-	)
-
-	runner := exec.Command(cmd, args...)
-	runner.Stdin = strings.NewReader(stdin)
-	runner.Stdout = &stdout
-	runner.Stderr = &stderr
-	err := runner.Run()
-
-	if err == nil {
-		return stdout.String()
-	}
-
-	return stderr.String()
-}
-
-func GoExecCommand(stdin string, cmd string, args ...string) string {
-	var (
-		stdout bytes.Buffer
-		stderr bytes.Buffer
-	)
-
-	runner := exec.Command(cmd, args...)
-	runner.Stdin = strings.NewReader(stdin)
-	runner.Stdout = &stdout
-	runner.Stderr = &stderr
-	err := runner.Run()
-
-	if err == nil {
-		return stdout.String()
-	}
-
-	return stderr.String()
-}
 
 type BuildMessage struct {
 	Type       string
@@ -102,43 +31,92 @@ func parseMessage(raw string) (*BuildMessage, error) {
 		return nil, fmt.Errorf("parse error")
 	}
 
-	Type := tokens[1]
-	SourceCode := line[1]
-	Args := tokens[2:]
+	Type := tokens[2]
+	Args := tokens[3:]
 
+	SourceCode := line[1]
 	return &BuildMessage{
 		Type:       Type,
 		SourceCode: SourceCode,
 		Args:       Args,
 	}, nil
+}
+
+func executeFileName(name string) string {
+	switch runtime.GOOS {
+	case "linux":
+		return name
+	case "darwin":
+		return fmt.Sprintf("./%s", name)
+	case "windows":
+	default:
+	}
+	return ""
+}
+
+func cppCodeRun(sourceCode string, outputFile string) string {
+	var (
+		stdout bytes.Buffer
+		stderr bytes.Buffer
+		stdin  = strings.NewReader(sourceCode)
+		err    error
+	)
+
+	r := CmdRunner{
+		cmd:  "g++",
+		args: []string{"-std=c++17", "-x", "c++", "-o", outputFile, "-"},
+	}
+	err = r.Run(stdin, &stdout, &stderr)
+	buildMsg := judgeOutput(err, stdout.String(), stderr.String())
+
+	stdout.Reset()
+	stderr.Reset()
+
+	r = CmdRunner{
+		cmd: executeFileName(outputFile),
+	}
+
+	err = r.Run(nil, &stdout, &stderr)
+
+	output := judgeOutput(err, stdout.String(), stderr.String())
+	if strings.Contains(output, "no such file or directory ") || strings.Contains(output, "exec format error") {
+		return buildMsg
+	}
+	return output
 
 }
 
-func outputMessage(raw string) string {
+func outputMessage(raw string, outputFileName string) string {
 	msg, err := parseMessage(raw)
 	if err != nil {
 		return err.Error()
 	}
-	var (
-		output string
-		stdout bytes.Buffer
-		stderr bytes.Buffer
-		stdin  = strings.NewReader(msg.SourceCode)
-	)
-	r := CmdRunner{
-		cmd:  msg.Args[0],
-		args: msg.Args[1:],
+	var output string
+	switch msg.Type {
+
+	case "c++", "cpp":
+		output = cppCodeRun(msg.SourceCode, outputFileName)
+
+	case "py", "python3", "python":
+
+	case "go":
+
+	case "rust":
+
 	}
 
-	err = r.Run(stdin, &stdout, &stderr)
-	output = judgeOutput(err, stdout.String(), stderr.String())
 	return output
+
 }
 
 func ErrOutput(prefix string, err error) {
 	if err != nil {
 		logrus.Warnf("%s :%v", prefix, err)
 	}
+}
+
+func HelpOutput() {
+
 }
 
 func main() {
@@ -159,9 +137,18 @@ func main() {
 		}
 
 		if (body.UserID != 0 || body.GroupID != 0) && strings.HasPrefix(body.RawMessage, "大鱼鱼") {
+			var tokens []string
+			if tokens = strings.Fields(body.RawMessage); len(tokens) < 2 || tokens[1] != "judge" {
+				continue
+			}
+
 			outputChan := make(chan error)
 			go func() {
-				output := outputMessage(body.RawMessage)
+				name, err := memfdCreate("output")
+				if err != nil {
+					return
+				}
+				output := outputMessage(body.RawMessage, name)
 				err = cat.send(body.GroupID, body.UserID, output)
 				outputChan <- err
 				ErrOutput("send error", err)
@@ -173,6 +160,7 @@ func main() {
 			case <-time.After(100 * time.Millisecond):
 				err := cat.send(body.GroupID, body.UserID, "building...")
 				ErrOutput("send error", err)
+				<-outputChan
 
 			}
 		}

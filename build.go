@@ -16,7 +16,12 @@ func judgeOutput(err error, stdout string, stderr string) string {
 	if stderr != "" {
 		return stderr
 	}
-	return err.Error()
+
+	if err != nil {
+		return err.Error()
+	}
+
+	return ""
 }
 
 type CmdRunner struct {
