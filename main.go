@@ -6,41 +6,15 @@ import (
 	"fmt"
 	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
+	"io"
 	"log"
+	"math"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
-
-type BuildMessage struct {
-	Type       string
-	Args       []string
-	SourceCode string
-}
-
-func parseMessage(raw string) (*BuildMessage, error) {
-	line := strings.SplitAfterN(raw, "\n", 2)
-
-	if len(line) == 0 {
-		return nil, fmt.Errorf("%s", "parse error,line must >=1")
-	}
-
-	tokens := strings.Fields(line[0])
-
-	if len(tokens) < 2 {
-		return nil, fmt.Errorf("parse error")
-	}
-
-	Type := tokens[2]
-	Args := tokens[3:]
-
-	SourceCode := line[1]
-	return &BuildMessage{
-		Type:       Type,
-		SourceCode: SourceCode,
-		Args:       Args,
-	}, nil
-}
 
 func executeFileName(name string) string {
 	switch runtime.GOOS {
@@ -142,78 +116,149 @@ func pyCodeRun(sourceCode string, outputFile string) string {
 	return output
 }
 
-func outputMessage(raw string, outputFileName string) string {
-	msg, err := parseMessage(raw)
-	if err != nil {
-		return err.Error()
-	}
-	var output string
-	switch msg.Type {
+func connectWithRetry(ctx context.Context, url string, maxRetries int) (*websocket.Conn, error) {
+	var conn *websocket.Conn
+	var err error
 
-	case "c++", "cpp":
-		output = cppCodeRun(msg.SourceCode, outputFileName)
+	for i := 0; i < maxRetries; i++ {
+		conn, _, err = websocket.Dial(ctx, url, nil)
+		if err == nil {
+			return conn, nil
+		}
 
-	case "py", "python3", "python":
-		output = pyCodeRun(msg.SourceCode, outputFileName)
-
-	case "go":
-		output = goCodeRun(msg.SourceCode, outputFileName)
-
-	case "rust":
-
+		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
+		logrus.Warnf("dial failed: %v, retrying in %v...", err, backoff)
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
-	return output
-
+	return nil, err
 }
 
-func ErrOutput(prefix string, err error) {
-	if err != nil {
-		logrus.Warnf("%s :%v", prefix, err)
-	}
+type TagID struct {
+	GroupID int
+	UserID  int
 }
 
-func HelpOutput() {
+func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
+	delim := "__CMD_DONE__"
+	stdoutReader, stdoutWriter := io.Pipe()
+	stderrReader, stderrWriter := io.Pipe()
+	outReader := NewDelimitedReader(stdoutReader, delim)
+	errReader := NewDelimitedReader(stderrReader, delim)
 
+	execShell := exec.Command(shellType)
+	stdin, err := execShell.StdinPipe()
+	execShell.Stdout = stdoutWriter
+	execShell.Stderr = stderrWriter
+
+	if err != nil {
+		return
+	}
+	startedChan := make(chan error)
+
+	go func() {
+		err := execShell.Start()
+		startedChan <- err
+		if err = execShell.Wait(); err != nil {
+			logrus.Infof("%s wait: %s", execShell, err)
+		}
+	}()
+
+	if err = <-startedChan; err != nil {
+		return
+	}
+
+	for resp := range msgChan {
+		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
+		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
+		io.WriteString(stdin, fullCmd)
+		output, _ := io.ReadAll(outReader)
+		errput, _ := io.ReadAll(errReader)
+		sendMsg := judgeOutput(nil, string(output), string(errput))
+		cat.send(resp.GroupID, resp.UserID, sendMsg)
+	}
+
+	if err = execShell.Process.Kill(); err != nil {
+		logrus.Warnf("kill shell %s,pid %d error", shellType, execShell.Process.Pid)
+	}
 }
 
 func main() {
-	ctx := context.Background()
+	conn, err := connectWithRetry(context.Background(), GlobalCfg.URL, 5)
 
-	conn, _, err := websocket.Dial(ctx, GlobalCfg.URL, nil)
 	if err != nil {
 		log.Fatal("dial error:", err)
 	}
 	defer conn.Close(websocket.StatusInternalError, "closing")
 
 	cat := &NapCat{conn: conn}
-	for {
+	var cmdDisPatcher BuildDisPatcher
+	messageChan := make(map[TagID]chan *NapCatResponse)
 
+	for {
 		var body NapCatResponse
 		if err := cat.recv(&body); err != nil {
 			continue
 		}
 
-		if (body.UserID != 0 || body.GroupID != 0) && strings.HasPrefix(body.RawMessage, GlobalCfg.Prefix) {
-			var tokens []string
-			if tokens = strings.Fields(body.RawMessage); len(tokens) < 2 || tokens[1] != "judge" {
-				continue
-			}
-			rawMessage := body.Message[0].Data.Text
-
-			go func() {
-				name, err := memfdCreate("output")
-				if err != nil {
-					return
-				}
-				output := outputMessage(rawMessage, name)
-				err = cat.send(body.GroupID, body.UserID, output)
-				ErrOutput("send error", err)
-			}()
-			err := cat.send(body.GroupID, body.UserID, "building...")
-			ErrOutput("send error", err)
+		if len(body.Message) == 0 {
+			continue
 		}
 
+		rawMessage := body.Message[0].Data.Text
+
+		tagID := TagID{
+			GroupID: body.GroupID,
+			UserID:  body.UserID,
+		}
+
+		if tagChan, ok := messageChan[tagID]; ok {
+
+			if body.RawMessage == "exit" {
+				close(tagChan)
+				delete(messageChan, tagID)
+				continue
+			}
+			tagChan <- &body
+		}
+
+		if !strings.HasPrefix(rawMessage, GlobalCfg.Prefix) {
+			continue
+		}
+
+		rawMessage = rawMessage[len(GlobalCfg.Prefix):]
+		rawMessage = strings.TrimSpace(rawMessage)
+
+		msg, err := parseMessage(rawMessage)
+
+		if err != nil {
+			logrus.Warnf(err.Error())
+			return
+		}
+
+		go func() {
+			data := cmdDisPatcher.Run(msg)
+
+			switch msg.Type {
+
+			case "bash", "sh", "zsh":
+				manyMsg := fmt.Sprintf("(%s): %s", body.Sender.Nickname, data)
+				cat.send(body.GroupID, body.UserID, manyMsg)
+				tagChan := make(chan *NapCatResponse, 1000)
+				messageChan[tagID] = tagChan
+				shellType := msg.Type
+				go LoopBashCmd(shellType, cat, messageChan[tagID])
+			default:
+				cat.send(body.GroupID, body.UserID, data)
+
+			}
+		}()
+
+		cat.send(body.GroupID, body.UserID, "building...")
 	}
 
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/sirupsen/logrus"
 	"io"
 	"os/exec"
 )
@@ -48,7 +49,7 @@ type NapCatRequest struct {
 	Echo   string         `json:"echo"`
 }
 
-func (c *NapCat) send(groupID, userID int, rawMessage string) error {
+func (c *NapCat) send(groupID, userID int, rawMessage string) {
 	ctx := context.Background()
 	var action string
 	params := make(map[string]any)
@@ -66,8 +67,11 @@ func (c *NapCat) send(groupID, userID int, rawMessage string) error {
 		Action: action,
 		Params: params,
 	}
+	err := wsjson.Write(ctx, c.conn, body)
+	if err != nil {
+		logrus.Warnf("send error: %s", err)
+	}
 
-	return wsjson.Write(ctx, c.conn, body)
 }
 
 func (c *NapCat) recv(resp *NapCatResponse) error {
