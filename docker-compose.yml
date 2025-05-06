@@ -1,12 +1,33 @@
-
-
 version: '3.8'
 
 services:
+  napcat:
+    image: mlikiowa/napcat-docker
+    container_name: napcat
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "6099:6099"
+    networks:
+      - my-network
+    restart: always
+    volumes:
+      - /opt/napcat/QQ:/app/.config/QQ
+      - /opt/napcat/config:/app/napcat/config
+
+
   build-bot:
     image: build-bot
     container_name: build-bot
-    network_mode: host
     restart: always
+    depends_on:
+      - napcat
+
+    networks:
+      - my-network
     volumes:
       - $PWD/config.yaml:/app/config.yaml
+
+networks:
+  my-network:
+    driver: bridge
