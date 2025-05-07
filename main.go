@@ -143,6 +143,15 @@ type TagID struct {
 	UserID  int
 }
 
+func GetStdoutOrStderr(reader io.Reader) (string, error) {
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+	str := string(output)
+	return strings.TrimSpace(str), nil
+}
+
 func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 	delim := "__CMD_DONE__"
 	stdoutReader, stdoutWriter := io.Pipe()
@@ -176,9 +185,9 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 		io.WriteString(stdin, fullCmd)
-		output, _ := io.ReadAll(outReader)
-		errput, _ := io.ReadAll(errReader)
-		sendMsg := judgeOutput(nil, string(output), string(errput))
+		output, _ := GetStdoutOrStderr(outReader)
+		errput, _ := GetStdoutOrStderr(errReader)
+		sendMsg := judgeOutput(nil, output, errput)
 		cat.send(resp.GroupID, resp.UserID, sendMsg)
 	}
 
