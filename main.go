@@ -100,6 +100,14 @@ func goCodeRun(sourceCode string, outputFile string) string {
 
 }
 
+func uploadRun(sourceCode string, outputFile string) string {
+	err := os.WriteFile(outputFile, []byte(sourceCode), 0655)
+	if err != nil {
+		return "write file error"
+	}
+	return "upload success"
+}
+
 func pyCodeRun(sourceCode string, outputFile string) string {
 	var (
 		stdout bytes.Buffer
@@ -186,8 +194,8 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 		io.WriteString(stdin, fullCmd)
 		output, _ := GetStdoutOrStderr(outReader)
-		errput, _ := GetStdoutOrStderr(errReader)
-		sendMsg := judgeOutput(nil, output, errput)
+		errOutput, _ := GetStdoutOrStderr(errReader)
+		sendMsg := judgeOutput(nil, output, errOutput)
 		cat.send(resp.GroupID, resp.UserID, sendMsg)
 	}
 
@@ -210,7 +218,10 @@ func main() {
 
 	for {
 		var body NapCatResponse
-		if err := cat.recv(&body); err != nil {
+		if err, closed := cat.recv(&body); err != nil {
+			if closed {
+				break
+			}
 			continue
 		}
 

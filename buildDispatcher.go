@@ -68,6 +68,9 @@ func (b *BuildDisPatcher) Run(msg *BuildMessage) string {
 
 	case "rust":
 
+	case "upload":
+		output = uploadRun(msg.SourceCode, msg.Args[0])
+
 	}
 	return output
 }

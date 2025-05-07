@@ -74,15 +74,16 @@ func (c *NapCat) send(groupID, userID int, rawMessage string) {
 
 }
 
-func (c *NapCat) recv(resp *NapCatResponse) error {
+func (c *NapCat) recv(resp *NapCatResponse) (error, bool) {
 	ctx := context.Background()
 	_, jsonData, err := c.conn.Read(ctx)
 	if err != nil {
-		return err
+		logrus.Warnf("connection closed err:%v", err)
+		return err, true
 	}
 
 	if err = json.Unmarshal(jsonData, resp); err != nil {
-		return err
+		return err, false
 	}
-	return nil
+	return nil, false
 }
