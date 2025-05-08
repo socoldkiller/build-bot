@@ -134,7 +134,7 @@ func GetStdoutOrStderr(reader io.Reader) (string, error) {
 	return strings.TrimSpace(str), nil
 }
 
-func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
+func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 	delim := "__CMD_DONE__"
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
@@ -162,6 +162,9 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 		return
 	}
 
+	// load sh profile
+	io.WriteString(stdin, "source /root/.shrc")
+
 	for resp := range msgChan {
 		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
@@ -179,7 +182,7 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 func main() {
 
 	cat := NewNapCat(context.Background(), GlobalCfg.URL)
-	var cmdDisPatcher BuildDisPatcher
+	cmdDisPatcher := NewBuildDisPatcher()
 	messageChan := make(map[Session]chan *NapCatResponse)
 
 	for {
@@ -220,24 +223,26 @@ func main() {
 		msg, err := parseMessage(rawMessage)
 
 		if err != nil {
+			cat.send(body.GroupID, body.UserID, "parse judge command error")
 			logrus.Warnf(err.Error())
-			return
+			continue
 		}
 
 		go func() {
 			data := cmdDisPatcher.Run(msg)
 
 			switch msg.Type {
+			case "add":
+				//todo
 
 			case "bash", "sh", "zsh":
 				manyMsg := fmt.Sprintf("(%s): %s", body.Sender.Nickname, data)
 				cat.send(body.GroupID, body.UserID, manyMsg)
-
 				logrus.Infof("%s shell start,userID %d,groupID %d,name %s", msg.Type, body.UserID, body.GroupID, body.Sender.Nickname)
 				tagChan := make(chan *NapCatResponse, 100)
 				messageChan[tagID] = tagChan
 				shellType := msg.Type
-				go LoopBashCmd(shellType, cat, messageChan[tagID])
+				go TTyShell(shellType, cat, messageChan[tagID])
 			default:
 				cat.send(body.GroupID, body.UserID, data)
 

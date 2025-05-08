@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/samber/lo"
+	"os"
 	"strings"
 )
 
@@ -40,19 +42,75 @@ func parseMessage(raw string) (*BuildMessage, error) {
 
 type BuildDisPatcher struct {
 	buildMsg BuildMessage
+
+	commands map[string]string
 }
 
-func (b *BuildDisPatcher) NewBuildDisPatcher(cmd string) {
+func NewBuildDisPatcher() *BuildDisPatcher {
+	return &BuildDisPatcher{
+		commands: make(map[string]string),
+	}
+}
+
+func parseAliasCommands(msg *BuildMessage) map[string]string {
+	commands := make(map[string]string)
+	for _, arg := range msg.Args {
+		splitter := strings.SplitN(arg, "=", 2)
+
+		if len(splitter) != 2 {
+			continue
+		}
+
+		varName := splitter[0]
+		varValue := splitter[1]
+		commands[varName] = varValue
+	}
+	return commands
+}
+
+func exportCommand(fileName string, commands map[string]string) error {
+	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for k, v := range commands {
+		cmd := fmt.Sprintf("alias %s=%s\n", k, v)
+		f.WriteString(cmd)
+	}
+
+	return nil
+}
+
+func aliasCommandRun(patcher *BuildDisPatcher, msg *BuildMessage) string {
+	if len(msg.Args) == 0 {
+		return ""
+	}
+	var output string
+	aliasCommands := parseAliasCommands(msg)
+	for k, v := range aliasCommands {
+		patcher.commands[k] = v
+	}
+	err := exportCommand("/root/.shrc", aliasCommands)
+	if err != nil {
+		return err.Error()
+	}
+	output = fmt.Sprintf("✅ Command %v added successfully!", lo.Keys(aliasCommands))
+	return output
 }
 
 func (b *BuildDisPatcher) Run(msg *BuildMessage) string {
 	var output string
+
 	name, err := memfdCreate("output")
 	if err != nil {
 		return output
 	}
 
 	switch msg.Type {
+	case "alias":
+		output = aliasCommandRun(b, msg)
+
 	case "bash", "sh", "zsh":
 		//todo
 		output = fmt.Sprintf("qq %s terminal start", msg.Type)
@@ -71,6 +129,18 @@ func (b *BuildDisPatcher) Run(msg *BuildMessage) string {
 	case "upload":
 		output = uploadRun(msg.SourceCode, msg.Args[0])
 
+	case "list":
+		output = b.showAllCommands()
+
 	}
 	return output
+}
+
+func (b *BuildDisPatcher) showAllCommands() string {
+	output := ""
+	for cmd, _ := range b.commands {
+		output += fmt.Sprintf("%s\n", cmd)
+	}
+	return output
+
 }

@@ -12,8 +12,7 @@ FROM alpine
 
 COPY --from=builder /app/build-bot /app/build-bot
 
-RUN apk add python3 gcc go g++ musl-dev
-
 WORKDIR /app
+COPY entrypoint.sh entrypoint.sh
 
-CMD ./build-bot
+ENTRYPOINT ["./entrypoint.sh"]
