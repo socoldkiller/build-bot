@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 	"io"
-	"math"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 )
 
 func executeFileName(name string) string {
@@ -123,29 +120,7 @@ func pyCodeRun(sourceCode string, outputFile string) string {
 	return output
 }
 
-func connectWithRetry(ctx context.Context, url string, maxRetries int) (*websocket.Conn, error) {
-	var conn *websocket.Conn
-	var err error
-
-	for i := 0; i < maxRetries; i++ {
-		conn, _, err = websocket.Dial(ctx, url, nil)
-		if err == nil {
-			return conn, nil
-		}
-
-		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
-		logrus.Warnf("dial failed: %v, retrying in %v...", err, backoff)
-		select {
-		case <-time.After(backoff):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-
-	return nil, err
-}
-
-type TagID struct {
+type Session struct {
 	GroupID int
 	UserID  int
 }
@@ -205,7 +180,7 @@ func main() {
 
 	cat := NewNapCat(context.Background(), GlobalCfg.URL)
 	var cmdDisPatcher BuildDisPatcher
-	messageChan := make(map[TagID]chan *NapCatResponse)
+	messageChan := make(map[Session]chan *NapCatResponse)
 
 	for {
 		var body NapCatResponse
@@ -219,7 +194,7 @@ func main() {
 
 		rawMessage := body.Message[0].Data.Text
 
-		tagID := TagID{
+		tagID := Session{
 			GroupID: body.GroupID,
 			UserID:  body.UserID,
 		}
