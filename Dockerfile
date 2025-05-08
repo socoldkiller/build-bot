@@ -5,7 +5,7 @@ COPY . /app
 
 WORKDIR /app
 
-RUN go build -o build-bot
+RUN CGO_ENABLED=0 go build -ldflags "-s -w" -gcflags="all=-N -l" -o build-bot
 
 
 FROM alpine
