@@ -7,7 +7,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -205,23 +204,14 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 }
 
 func main() {
-	conn, err := connectWithRetry(context.Background(), GlobalCfg.URL, 5)
 
-	if err != nil {
-		log.Fatal("dial error:", err)
-	}
-	defer conn.Close(websocket.StatusInternalError, "closing")
-
-	cat := &NapCat{conn: conn}
+	cat := NewNapCat(context.Background(), GlobalCfg.URL)
 	var cmdDisPatcher BuildDisPatcher
 	messageChan := make(map[TagID]chan *NapCatResponse)
 
 	for {
 		var body NapCatResponse
-		if err, closed := cat.recv(&body); err != nil {
-			if closed {
-				break
-			}
+		if err := cat.recv(&body); err != nil {
 			continue
 		}
 

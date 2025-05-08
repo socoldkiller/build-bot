@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
-	"github.com/sirupsen/logrus"
 	"io"
 	"os/exec"
 )
@@ -40,7 +38,14 @@ func (runner *CmdRunner) Run(stdin io.Reader, stdout, stderr io.Writer) error {
 }
 
 type NapCat struct {
-	conn *websocket.Conn
+	ws *Websocket
+}
+
+func NewNapCat(ctx context.Context, url string) *NapCat {
+	ws := NewWebSocket(ctx, url)
+	return &NapCat{
+		ws: ws,
+	}
 }
 
 type NapCatRequest struct {
@@ -67,23 +72,17 @@ func (c *NapCat) send(groupID, userID int, rawMessage string) {
 		Action: action,
 		Params: params,
 	}
-	err := wsjson.Write(ctx, c.conn, body)
+	jsonData, err := json.Marshal(body)
 	if err != nil {
-		logrus.Warnf("send error: %s", err)
+		return
 	}
-
+	c.ws.Write(ctx, websocket.MessageText, jsonData)
 }
 
-func (c *NapCat) recv(resp *NapCatResponse) (error, bool) {
-	ctx := context.Background()
-	_, jsonData, err := c.conn.Read(ctx)
-	if err != nil {
-		logrus.Warnf("connection closed err:%v", err)
-		return err, true
+func (c *NapCat) recv(resp *NapCatResponse) error {
+	_, jsonData := c.ws.Read(context.Background())
+	if err := json.Unmarshal(jsonData, resp); err != nil {
+		return err
 	}
-
-	if err = json.Unmarshal(jsonData, resp); err != nil {
-		return err, false
-	}
-	return nil, false
+	return nil
 }
