@@ -170,7 +170,6 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 	stdin, err := execShell.StdinPipe()
 	execShell.Stdout = stdoutWriter
 	execShell.Stderr = stderrWriter
-
 	if err != nil {
 		return
 	}
@@ -197,7 +196,6 @@ func LoopBashCmd(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) 
 		sendMsg := judgeOutput(nil, output, errOutput)
 		cat.send(resp.GroupID, resp.UserID, sendMsg)
 	}
-
 	if err = execShell.Process.Kill(); err != nil {
 		logrus.Warnf("kill shell %s,pid %d error", shellType, execShell.Process.Pid)
 	}
@@ -227,8 +225,9 @@ func main() {
 		}
 
 		if tagChan, ok := messageChan[tagID]; ok {
-
 			if body.RawMessage == "exit" {
+				msg := fmt.Sprintf("(%s) goodbye.", body.Sender.Nickname)
+				cat.send(body.GroupID, body.UserID, msg)
 				close(tagChan)
 				delete(messageChan, tagID)
 				continue
@@ -258,7 +257,9 @@ func main() {
 			case "bash", "sh", "zsh":
 				manyMsg := fmt.Sprintf("(%s): %s", body.Sender.Nickname, data)
 				cat.send(body.GroupID, body.UserID, manyMsg)
-				tagChan := make(chan *NapCatResponse, 1000)
+
+				logrus.Infof("%s shell start,userID %d,groupID %d,name %s", msg.Type, body.UserID, body.GroupID, body.Sender.Nickname)
+				tagChan := make(chan *NapCatResponse, 100)
 				messageChan[tagID] = tagChan
 				shellType := msg.Type
 				go LoopBashCmd(shellType, cat, messageChan[tagID])
