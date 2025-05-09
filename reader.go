@@ -6,44 +6,36 @@ import (
 )
 
 type DelimitedReader struct {
-	r      io.Reader
-	delim  []byte
-	buffer []byte
-	eofHit bool
+	r io.Reader
 }
 
-func NewDelimitedReader(r io.Reader, delim string) *DelimitedReader {
+func NewDelimitedReader(r io.Reader) *DelimitedReader {
 	return &DelimitedReader{
-		r:     r,
-		delim: []byte(delim),
+		r: r,
 	}
 }
 
 func (dr *DelimitedReader) Read(p []byte) (int, error) {
-	if dr.eofHit {
-		dr.eofHit = false
-	}
+	return dr.r.Read(p)
+}
+
+func (dr *DelimitedReader) ReadString(delim []byte) (string, error) {
+	var buf []byte
+	b := make([]byte, 1024)
 	for {
-		if idx := bytes.Index(dr.buffer, dr.delim); idx != -1 {
-			n := copy(p, dr.buffer[:idx])
-			dr.buffer = dr.buffer[idx+len(dr.delim):]
-			dr.eofHit = true
-			return n, io.EOF
+
+		if idx := bytes.Index(buf, delim); idx != -1 {
+			return string(buf[:idx]), nil
 		}
 
-		tmp := make([]byte, 1024)
-		n, err := dr.r.Read(tmp)
-		if n > 0 {
-			dr.buffer = append(dr.buffer, tmp[:n]...)
-		}
-
+		n, err := dr.Read(b)
 		if err != nil {
-			if len(dr.buffer) > 0 {
-				n := copy(p, dr.buffer)
-				dr.buffer = nil
-				return n, io.EOF
+			if err == io.EOF {
+				err = nil
 			}
-			return 0, err
+			buf = append(buf, b[:n]...)
+			return string(buf), err
 		}
+		buf = append(buf, b[:n]...)
 	}
 }

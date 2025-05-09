@@ -8,21 +8,20 @@ import (
 	"strings"
 )
 
-func GetStdoutOrStderr(reader io.Reader) (string, error) {
-	output, err := io.ReadAll(reader)
+func GetStdoutOrStderr(reader *DelimitedReader, delim []byte) (string, error) {
+	output, err := reader.ReadString(delim)
 	if err != nil {
 		return "", err
 	}
-	str := string(output)
-	return strings.TrimSpace(str), nil
+	return strings.TrimSpace(output), nil
 }
 
 func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
-	delim := "__CMD_DONE__"
+	delim := []byte("__CMD_DONE__")
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
-	outReader := NewDelimitedReader(stdoutReader, delim)
-	errReader := NewDelimitedReader(stderrReader, delim)
+	outReader := NewDelimitedReader(stdoutReader)
+	errReader := NewDelimitedReader(stderrReader)
 
 	execShell := exec.Command(shellType)
 	stdin, err := execShell.StdinPipe()
@@ -52,8 +51,8 @@ func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 		io.WriteString(stdin, fullCmd)
-		output, _ := GetStdoutOrStderr(outReader)
-		errOutput, _ := GetStdoutOrStderr(errReader)
+		output, _ := GetStdoutOrStderr(outReader, delim)
+		errOutput, _ := GetStdoutOrStderr(errReader, delim)
 		sendMsg := judgeOutput(nil, output, errOutput)
 		cat.send(resp.GroupID, resp.UserID, sendMsg)
 	}

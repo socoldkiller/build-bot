@@ -7,10 +7,12 @@ import (
 	"github.com/coder/websocket"
 	"io"
 	"os/exec"
+	"strings"
 )
 
 func judgeOutput(err error, stdout string, stderr string) string {
 	output := fmt.Sprintf("%s\n%s", stdout, stderr)
+	output = strings.TrimSpace(output)
 	if output == "" {
 		output = err.Error()
 	}
