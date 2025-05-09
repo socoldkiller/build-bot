@@ -3,24 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/coder/websocket"
 	"io"
 	"os/exec"
 )
 
 func judgeOutput(err error, stdout string, stderr string) string {
-	if stdout != "" {
-		return stdout
+	output := fmt.Sprintf("%s\n%s", stdout, stderr)
+	if output == "" {
+		output = err.Error()
 	}
-	if stderr != "" {
-		return stderr
-	}
-
-	if err != nil {
-		return err.Error()
-	}
-
-	return ""
+	return output
 }
 
 type CmdRunner struct {

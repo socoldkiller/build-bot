@@ -5,7 +5,17 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"os/exec"
+	"strings"
 )
+
+func GetStdoutOrStderr(reader io.Reader) (string, error) {
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+	str := string(output)
+	return strings.TrimSpace(str), nil
+}
 
 func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 	delim := "__CMD_DONE__"

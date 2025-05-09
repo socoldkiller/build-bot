@@ -3,22 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 )
 
 type Session struct {
 	GroupID int
 	UserID  int
-}
-
-func GetStdoutOrStderr(reader io.Reader) (string, error) {
-	output, err := io.ReadAll(reader)
-	if err != nil {
-		return "", err
-	}
-	str := string(output)
-	return strings.TrimSpace(str), nil
 }
 
 func main() {
