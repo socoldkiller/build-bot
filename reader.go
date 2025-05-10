@@ -32,6 +32,7 @@ func (dr *DelimitedReader) ReadString(delim []byte) (string, error) {
 		if err != nil {
 			if err == io.EOF {
 				err = nil
+				continue
 			}
 			buf = append(buf, b[:n]...)
 			return string(buf), err
