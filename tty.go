@@ -8,12 +8,16 @@ import (
 	"strings"
 )
 
-func GetStdoutOrStderr(reader *DelimitedReader, delim []byte) (string, error) {
-	output, err := reader.ReadString(delim)
-	if err != nil {
-		return "", err
+func CombineOutput(stdout *DelimitedReader, stderr *DelimitedReader, delim []byte) string {
+	outputStdout, err1 := stdout.ReadString(delim)
+	outputStderr, err2 := stderr.ReadString(delim)
+
+	if err1 == nil && err2 == nil {
+		output := fmt.Sprintf("%s\n%s", outputStdout, outputStderr)
+		output = strings.TrimSpace(output)
+		return output
 	}
-	return strings.TrimSpace(output), nil
+	return "get cmd stdout/stderr failed"
 }
 
 func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
@@ -51,10 +55,9 @@ func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 		io.WriteString(stdin, fullCmd)
-		output, _ := GetStdoutOrStderr(outReader, delim)
-		errOutput, _ := GetStdoutOrStderr(errReader, delim)
-		sendMsg := judgeOutput(nil, output, errOutput)
-		cat.send(resp.GroupID, resp.UserID, sendMsg)
+
+		msg := CombineOutput(outReader, errReader, delim)
+		cat.send(resp.GroupID, resp.UserID, msg)
 	}
 	if err = execShell.Process.Kill(); err != nil {
 		logrus.Warnf("kill shell %s,pid %d error", shellType, execShell.Process.Pid)
