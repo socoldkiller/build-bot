@@ -66,7 +66,7 @@ func NewCommandDisPatcher(cat *NapCat, msgChan map[Session]chan *NapCatResponse)
 }
 
 func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
-	rawMessage := rawMsg.RawMessage
+	rawMessage := rawMsg.Message[0].Data.Text
 	rawMessage = rawMessage[len(GlobalCfg.Prefix):]
 	rawMessage = strings.TrimSpace(rawMessage)
 

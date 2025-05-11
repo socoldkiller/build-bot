@@ -52,7 +52,8 @@ func TTyShell(shellType string, cat *NapCat, msgChan <-chan *NapCatResponse) {
 	io.WriteString(stdin, "source /root/.shrc\n")
 
 	for resp := range msgChan {
-		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", resp.RawMessage, delim, delim)
+		rawMessage := resp.Message[0].Data.Text
+		fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", rawMessage, delim, delim)
 		logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 		io.WriteString(stdin, fullCmd)
 
