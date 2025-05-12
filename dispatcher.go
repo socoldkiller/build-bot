@@ -115,7 +115,11 @@ func ShellCmd(msgCtx *MessageContext) string {
 	cat := msgCtx.cat
 	name := msgCtx.rawMsg.Sender.Nickname
 	title := fmt.Sprintf("(%s):qq %s terminal start", name, msgCtx.buildMsg.SubCommand)
-	go TTyShell(msgCtx.buildMsg.SubCommand, cat, msgCtx.msgContext)
+	shell, err := NewShell(msgCtx.buildMsg.SubCommand)
+	if err != nil {
+		return fmt.Sprintf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
+	}
+	go TTyShell(shell, cat, msgCtx.msgContext)
 	return title
 }
 

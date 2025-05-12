@@ -12,7 +12,6 @@ FROM alpine
 
 COPY --from=builder /app/build-bot /app/build-bot
 
-RUN apk add --no-cache bash zsh
 
 WORKDIR /app
 COPY entrypoint.sh entrypoint.sh
