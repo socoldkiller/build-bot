@@ -25,7 +25,7 @@ type MessageContext struct {
 
 type CommandDispatcher struct {
 	commands    map[string]string
-	commandRuns map[string]func(msgContext *MessageContext) string
+	commandRuns map[string]func(msgContext *MessageContext) (string, error)
 	rw          sync.RWMutex
 
 	msgChan map[Session]chan *NapCatResponse
@@ -59,7 +59,7 @@ func parseMessage(raw string) (*BuildMessage, error) {
 func NewCommandDisPatcher(cat *NapCat, msgChan map[Session]chan *NapCatResponse) *CommandDispatcher {
 	return &CommandDispatcher{
 		commands:    make(map[string]string),
-		commandRuns: make(map[string]func(msgCtx *MessageContext) string),
+		commandRuns: make(map[string]func(msgCtx *MessageContext) (string, error)),
 		msgChan:     msgChan,
 		cat:         cat,
 	}
@@ -92,45 +92,48 @@ func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
 	}
 
 	if run, ok := b.commandRuns[msg.SubCommand]; ok {
+		data, err := run(msgCtx)
+		if err != nil {
+			return err.Error()
+		}
 		if _, ok1 := b.msgChan[id]; !ok1 {
 			if msg.SubCommand == "bash" || msg.SubCommand == "sh" || msg.SubCommand == "zsh" {
 				b.msgChan[id] = make(chan *NapCatResponse, 100)
 				msgCtx.msgContext = b.msgChan[id]
 			}
 		}
-		data := run(msgCtx)
 		return data
 	}
 
 	return fmt.Sprintf("not found subcommand %s", msg.SubCommand)
 }
 
-func (b *CommandDispatcher) Register(subCommand string, f func(msgCtx *MessageContext) string) {
+func (b *CommandDispatcher) Register(subCommand string, f func(msgCtx *MessageContext) (string, error)) {
 	b.rw.Lock()
 	defer b.rw.Unlock()
 	b.commandRuns[subCommand] = f
 }
 
-func ShellCmd(msgCtx *MessageContext) string {
+func ShellCmd(msgCtx *MessageContext) (string, error) {
 	cat := msgCtx.cat
 	name := msgCtx.rawMsg.Sender.Nickname
 	title := fmt.Sprintf("(%s):qq %s terminal start", name, msgCtx.buildMsg.SubCommand)
 	shell, err := NewShell(msgCtx.buildMsg.SubCommand)
 	if err != nil {
-		return fmt.Sprintf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
+		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
 	go TTyShell(shell, cat, msgCtx.msgContext)
-	return title
+	return title, nil
 }
 
-func FileCmd(msgCtx *MessageContext) string {
+func FileCmd(msgCtx *MessageContext) (string, error) {
 	if len(msgCtx.buildMsg.Args) == 0 {
-		return ""
+		return "", nil
 	}
 	file := msgCtx.buildMsg.Args[0]
 	err := os.WriteFile(file, []byte(msgCtx.buildMsg.SourceCode), 0655)
 	if err != nil {
-		return err.Error()
+		return "", err
 	}
-	return "write file success"
+	return "write file success", nil
 }
