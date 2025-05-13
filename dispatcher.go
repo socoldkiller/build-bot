@@ -21,7 +21,7 @@ type MessageContext struct {
 	id                *Session
 	rawMsg            *NapCatResponse
 	msgContext        chan *NapCatResponse
-	msgSessionContext map[Session]chan *NapCatResponse
+	msgSessionContext *MsgQueue
 	commands          map[string]string
 }
 
@@ -29,9 +29,8 @@ type CommandDispatcher struct {
 	commands    map[string]string
 	commandRuns map[string]func(msgContext *MessageContext) (string, error)
 	rw          sync.RWMutex
-
-	msgChan map[Session]chan *NapCatResponse
-	cat     *NapCat
+	msgChan     *MsgQueue
+	cat         *NapCat
 }
 
 func parseMessage(raw string) (*BuildMessage, error) {
@@ -58,7 +57,7 @@ func parseMessage(raw string) (*BuildMessage, error) {
 	}, nil
 }
 
-func NewCommandDisPatcher(cat *NapCat, msgChan map[Session]chan *NapCatResponse) *CommandDispatcher {
+func NewCommandDisPatcher(cat *NapCat, msgChan *MsgQueue) *CommandDispatcher {
 	return &CommandDispatcher{
 		commands:    make(map[string]string),
 		commandRuns: make(map[string]func(msgCtx *MessageContext) (string, error)),
@@ -83,9 +82,9 @@ func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
 		GroupID: rawMsg.GroupID,
 		UserID:  rawMsg.UserID,
 	}
-
+	msgContext, _ := GetMsgQueue(id, b.msgChan)
 	msgCtx := &MessageContext{
-		msgContext:        b.msgChan[id],
+		msgContext:        msgContext,
 		cat:               b.cat,
 		commands:          b.commands,
 		buildMsg:          msg,
@@ -116,9 +115,9 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 	name := msgCtx.rawMsg.Sender.Nickname
 	title := fmt.Sprintf("(%s):qq %s terminal start", name, msgCtx.buildMsg.SubCommand)
 
-	removeSession := func(sessionMsgContext map[Session]chan *NapCatResponse, stopChan <-chan error) {
+	removeSession := func(sessionMsgContext *MsgQueue, stopChan <-chan error) {
 		<-stopChan
-		delete(msgCtx.msgSessionContext, *msgCtx.id)
+		DeleteMsgQueue(*msgCtx.id, msgCtx.msgSessionContext)
 	}
 
 	shell, err := NewShell(msgCtx.buildMsg.SubCommand)
@@ -126,7 +125,8 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
 	msgCtx.msgContext = make(chan *NapCatResponse, 100)
-	msgCtx.msgSessionContext[*msgCtx.id] = msgCtx.msgContext
+	SetMsgQueue(*msgCtx.id, msgCtx.msgContext, msgCtx.msgSessionContext)
+
 	stopChan := make(chan error)
 	go TTyShell(context.Background(), shell, cat, msgCtx.msgContext, stopChan)
 	go removeSession(msgCtx.msgSessionContext, stopChan)

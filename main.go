@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type Session struct {
@@ -11,10 +12,37 @@ type Session struct {
 	UserID  int
 }
 
+type MsgQueue struct {
+	rw    sync.Mutex
+	queue map[Session]chan *NapCatResponse
+}
+
+func GetMsgQueue(session Session, q *MsgQueue) (chan *NapCatResponse, bool) {
+	q.rw.Lock()
+	defer q.rw.Unlock()
+	msgChan, ok := q.queue[session]
+	return msgChan, ok
+}
+
+func SetMsgQueue(session Session, msgChan chan *NapCatResponse, q *MsgQueue) {
+	q.rw.Lock()
+	defer q.rw.Unlock()
+	q.queue[session] = msgChan
+}
+
+func DeleteMsgQueue(session Session, q *MsgQueue) {
+	q.rw.Lock()
+	defer q.rw.Unlock()
+	delete(q.queue, session)
+}
+
 func main() {
 
 	cat := NewNapCat(context.Background(), GlobalCfg.URL)
-	msgQueue := make(map[Session]chan *NapCatResponse)
+	msgQueue := &MsgQueue{
+		queue: make(map[Session]chan *NapCatResponse),
+	}
+
 	cmdDisPatcher := NewCommandDisPatcher(cat, msgQueue)
 	cmdDisPatcher.Register("bash", ShellCmd)
 	cmdDisPatcher.Register("sh", ShellCmd)
@@ -38,12 +66,11 @@ func main() {
 			UserID:  body.UserID,
 		}
 
-		if msgChan, ok := msgQueue[sessionID]; ok {
+		if msgChan, ok := GetMsgQueue(sessionID, msgQueue); ok {
 			if body.RawMessage == "exit" {
 				msg := fmt.Sprintf("(%s) goodbye.", body.Sender.Nickname)
 				cat.send(body.GroupID, body.UserID, msg)
 				close(msgChan)
-				delete(msgQueue, sessionID)
 				continue
 			}
 			msgChan <- &body
