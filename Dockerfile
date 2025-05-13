@@ -5,7 +5,12 @@ COPY . /app
 
 WORKDIR /app
 
+RUN apk update && \
+    apk add upx
+
 RUN CGO_ENABLED=0 go build -ldflags "-s -w" -gcflags="all=-N -l" -o build-bot
+
+RUN upx -9 build-bot
 
 
 FROM alpine
