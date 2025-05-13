@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 func CombineOutput(stdout, stderr string) string {
@@ -75,7 +76,7 @@ func (s *Shell) Close() error {
 	return errors.Join(errs...)
 }
 
-func (s *Shell) Exec(ctx context.Context, cmd string) (map[string]string, error) {
+func (s *Shell) Exec(cmd string) (map[string]string, error) {
 	fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", cmd, s.delim, s.delim)
 	logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 	io.WriteString(s.stdin, fullCmd)
@@ -89,20 +90,37 @@ func (s *Shell) Exec(ctx context.Context, cmd string) (map[string]string, error)
 	}, err
 }
 
-func TTyShell(shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse) {
-	for msg := range msgChan {
-		cmd := msg.Message[0].Data.Text
-		output, err := shell.Exec(context.Background(), cmd)
-		if err != nil {
-			cat.send(msg.GroupID, msg.UserID, err.Error())
-			continue
+func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse) {
+	killCmd := func() {
+		if err := shell.shell.Process.Kill(); err != nil {
+			logrus.Warnf("kill shell %s failed,pid %d err: %v", shell.shellType, shell.shell.Process.Pid, err)
 		}
-		resp := CombineOutput(output["stdout"], output["stderr"])
-		cat.send(msg.GroupID, msg.UserID, resp)
+	}
+	defer killCmd()
 
+	for {
+		select {
+		case <-ctx.Done():
+			logrus.Infof("TTyShell context canceled: %v", ctx.Err())
+			return
+
+		case <-time.After(5 * time.Minute):
+			logrus.Infof("tty shell timeout")
+			return
+
+		case msg, ok := <-msgChan:
+			if !ok {
+				return
+			}
+			cmd := msg.Message[0].Data.Text
+			output, err := shell.Exec(cmd)
+			if err != nil {
+				cat.send(msg.GroupID, msg.UserID, err.Error())
+				continue
+			}
+			resp := CombineOutput(output["stdout"], output["stderr"])
+			cat.send(msg.GroupID, msg.UserID, resp)
+		}
 	}
 
-	if err := shell.shell.Process.Kill(); err != nil {
-		logrus.Warnf("kill shell %s failed,pid %d err: %v", shell.shellType, shell.shell.Process.Pid, err)
-	}
 }

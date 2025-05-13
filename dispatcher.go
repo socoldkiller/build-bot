@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/shlex"
 	"os"
@@ -122,7 +123,7 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
 	msgCtx.msgContext = make(chan *NapCatResponse, 100)
-	go TTyShell(shell, cat, msgCtx.msgContext)
+	go TTyShell(context.Background(), shell, cat, msgCtx.msgContext)
 	return title, nil
 }
 
