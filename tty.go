@@ -120,6 +120,9 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 				continue
 			}
 			resp := CombineOutput(output["stdout"], output["stderr"])
+			if resp == "" {
+				continue
+			}
 			cat.send(msg.GroupID, msg.UserID, resp)
 		}
 	}
