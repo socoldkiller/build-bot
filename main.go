@@ -13,27 +13,24 @@ type Session struct {
 }
 
 type MsgQueue struct {
-	rw    sync.Mutex
+	q     sync.Map
 	queue map[Session]chan *NapCatResponse
 }
 
-func GetMsgQueue(session Session, q *MsgQueue) (chan *NapCatResponse, bool) {
-	q.rw.Lock()
-	defer q.rw.Unlock()
-	msgChan, ok := q.queue[session]
-	return msgChan, ok
+func (m *MsgQueue) Store(k Session, v chan *NapCatResponse) {
+	m.q.Store(k, v)
 }
 
-func SetMsgQueue(session Session, msgChan chan *NapCatResponse, q *MsgQueue) {
-	q.rw.Lock()
-	defer q.rw.Unlock()
-	q.queue[session] = msgChan
+func (m *MsgQueue) Load(k Session) (chan *NapCatResponse, bool) {
+	r, ok := m.q.Load(k)
+	if !ok {
+		return nil, ok
+	}
+	return r.(chan *NapCatResponse), ok
 }
 
-func DeleteMsgQueue(session Session, q *MsgQueue) {
-	q.rw.Lock()
-	defer q.rw.Unlock()
-	delete(q.queue, session)
+func (m *MsgQueue) Delete(k Session) {
+	m.q.Delete(k)
 }
 
 func main() {
@@ -66,12 +63,12 @@ func main() {
 			UserID:  body.UserID,
 		}
 
-		if msgChan, ok := GetMsgQueue(sessionID, msgQueue); ok {
+		if msgChan, ok := msgQueue.Load(sessionID); ok {
 			if body.RawMessage == "exit" {
 				msg := fmt.Sprintf("(%s) goodbye.", body.Sender.Nickname)
 				cat.send(body.GroupID, body.UserID, msg)
 				close(msgChan)
-				DeleteMsgQueue(sessionID, msgQueue)
+				msgQueue.Delete(sessionID)
 				continue
 			}
 			msgChan <- &body

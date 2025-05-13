@@ -82,7 +82,7 @@ func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
 		GroupID: rawMsg.GroupID,
 		UserID:  rawMsg.UserID,
 	}
-	msgContext, _ := GetMsgQueue(id, b.msgChan)
+	msgContext, _ := b.msgChan.Load(id)
 	msgCtx := &MessageContext{
 		msgContext:        msgContext,
 		cat:               b.cat,
@@ -114,10 +114,9 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 	cat := msgCtx.cat
 	name := msgCtx.rawMsg.Sender.Nickname
 	title := fmt.Sprintf("(%s):qq %s terminal start", name, msgCtx.buildMsg.SubCommand)
-
 	removeSession := func(sessionMsgContext *MsgQueue, stopChan <-chan error) {
 		<-stopChan
-		DeleteMsgQueue(*msgCtx.id, msgCtx.msgSessionContext)
+		msgCtx.msgSessionContext.Delete(*msgCtx.id)
 	}
 
 	shell, err := NewShell(msgCtx.buildMsg.SubCommand)
@@ -125,7 +124,7 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
 	msgCtx.msgContext = make(chan *NapCatResponse, 100)
-	SetMsgQueue(*msgCtx.id, msgCtx.msgContext, msgCtx.msgSessionContext)
+	msgCtx.msgSessionContext.Store(*msgCtx.id, msgCtx.msgContext)
 
 	stopChan := make(chan error)
 	go TTyShell(context.Background(), shell, cat, msgCtx.msgContext, stopChan)
