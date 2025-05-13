@@ -92,10 +92,10 @@ func (s *Shell) Exec(cmd string) (map[string]string, error) {
 
 func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse, stopChan chan<- error) {
 	killCmd := func() {
-		stopChan <- nil
 		if err := shell.shell.Process.Kill(); err != nil {
 			logrus.Warnf("kill shell %s failed,pid %d err: %v", shell.shellType, shell.shell.Process.Pid, err)
 		}
+		stopChan <- nil
 	}
 	defer killCmd()
 

@@ -71,6 +71,7 @@ func main() {
 				msg := fmt.Sprintf("(%s) goodbye.", body.Sender.Nickname)
 				cat.send(body.GroupID, body.UserID, msg)
 				close(msgChan)
+				DeleteMsgQueue(sessionID, msgQueue)
 				continue
 			}
 			msgChan <- &body
