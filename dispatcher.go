@@ -16,12 +16,13 @@ type BuildMessage struct {
 }
 
 type MessageContext struct {
-	buildMsg   *BuildMessage
-	cat        *NapCat
-	id         *Session
-	rawMsg     *NapCatResponse
-	msgContext chan *NapCatResponse
-	commands   map[string]string
+	buildMsg          *BuildMessage
+	cat               *NapCat
+	id                *Session
+	rawMsg            *NapCatResponse
+	msgContext        chan *NapCatResponse
+	msgSessionContext map[Session]chan *NapCatResponse
+	commands          map[string]string
 }
 
 type CommandDispatcher struct {
@@ -84,23 +85,19 @@ func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
 	}
 
 	msgCtx := &MessageContext{
-		msgContext: b.msgChan[id],
-		cat:        b.cat,
-		commands:   b.commands,
-		buildMsg:   msg,
-		id:         &id,
-		rawMsg:     rawMsg,
+		msgContext:        b.msgChan[id],
+		cat:               b.cat,
+		commands:          b.commands,
+		buildMsg:          msg,
+		id:                &id,
+		rawMsg:            rawMsg,
+		msgSessionContext: b.msgChan,
 	}
 
 	if run, ok := b.commandRuns[msg.SubCommand]; ok {
 		data, err := run(msgCtx)
 		if err != nil {
 			return err.Error()
-		}
-		if _, ok1 := b.msgChan[id]; !ok1 {
-			if msg.SubCommand == "bash" || msg.SubCommand == "sh" || msg.SubCommand == "zsh" {
-				b.msgChan[id] = msgCtx.msgContext
-			}
 		}
 		return data
 	}
@@ -118,12 +115,21 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 	cat := msgCtx.cat
 	name := msgCtx.rawMsg.Sender.Nickname
 	title := fmt.Sprintf("(%s):qq %s terminal start", name, msgCtx.buildMsg.SubCommand)
+
+	removeSession := func(sessionMsgContext map[Session]chan *NapCatResponse, stopChan <-chan error) {
+		<-stopChan
+		delete(msgCtx.msgSessionContext, *msgCtx.id)
+	}
+
 	shell, err := NewShell(msgCtx.buildMsg.SubCommand)
 	if err != nil {
 		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
 	msgCtx.msgContext = make(chan *NapCatResponse, 100)
-	go TTyShell(context.Background(), shell, cat, msgCtx.msgContext)
+	msgCtx.msgSessionContext[*msgCtx.id] = msgCtx.msgContext
+	stopChan := make(chan error)
+	go TTyShell(context.Background(), shell, cat, msgCtx.msgContext, stopChan)
+	go removeSession(msgCtx.msgSessionContext, stopChan)
 	return title, nil
 }
 
