@@ -98,8 +98,7 @@ func (b *CommandDispatcher) Run(rawMsg *NapCatResponse) string {
 		}
 		if _, ok1 := b.msgChan[id]; !ok1 {
 			if msg.SubCommand == "bash" || msg.SubCommand == "sh" || msg.SubCommand == "zsh" {
-				b.msgChan[id] = make(chan *NapCatResponse, 100)
-				msgCtx.msgContext = b.msgChan[id]
+				b.msgChan[id] = msgCtx.msgContext
 			}
 		}
 		return data
@@ -122,6 +121,7 @@ func ShellCmd(msgCtx *MessageContext) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create shell %s failed,err: %v", msgCtx.buildMsg.SubCommand, err)
 	}
+	msgCtx.msgContext = make(chan *NapCatResponse, 100)
 	go TTyShell(shell, cat, msgCtx.msgContext)
 	return title, nil
 }

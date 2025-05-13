@@ -18,13 +18,13 @@ func CombineOutput(stdout, stderr string) string {
 }
 
 type Shell struct {
-	delim   []byte
-	stdout  *DelimitedReader
-	stderr  *DelimitedReader
-	stdin   io.Writer
-	closers []io.Closer
-
-	c *exec.Cmd
+	delim     []byte
+	stdout    *DelimitedReader
+	stderr    *DelimitedReader
+	stdin     io.Writer
+	closers   []io.Closer
+	shell     *exec.Cmd
+	shellType string
 }
 
 func NewShell(shellType string) (*Shell, error) {
@@ -43,12 +43,13 @@ func NewShell(shellType string) (*Shell, error) {
 	}
 
 	s := &Shell{
-		delim:   delim,
-		stdin:   stdin,
-		stdout:  outReader,
-		stderr:  errReader,
-		closers: []io.Closer{stdin},
-		c:       execShell,
+		delim:     delim,
+		stdin:     stdin,
+		stdout:    outReader,
+		stderr:    errReader,
+		closers:   []io.Closer{stdin},
+		shell:     execShell,
+		shellType: shellType,
 	}
 	startedChan := make(chan error)
 	go waitShellStart(startedChan, s)
@@ -60,9 +61,9 @@ func NewShell(shellType string) (*Shell, error) {
 
 func waitShellStart(startedChan chan<- error, shell *Shell) {
 	defer shell.Close()
-	err := shell.c.Start()
+	err := shell.shell.Start()
 	startedChan <- err
-	if err = shell.c.Wait(); err != nil {
+	if err = shell.shell.Wait(); err != nil {
 		logrus.Infof("%s wait: %s", shell, err)
 	}
 }
@@ -101,4 +102,7 @@ func TTyShell(shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse) {
 
 	}
 
+	if err := shell.shell.Process.Kill(); err != nil {
+		logrus.Warnf("kill shell %s failed,pid %d err: %v", shell.shellType, shell.shell.Process.Pid, err)
+	}
 }
