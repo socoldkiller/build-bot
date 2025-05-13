@@ -65,7 +65,7 @@ func waitShellStart(startedChan chan<- error, shell *Shell) {
 	err := shell.shell.Start()
 	startedChan <- err
 	if err = shell.shell.Wait(); err != nil {
-		logrus.Infof("%s wait: %s", shell, err)
+		logrus.Infof("%s wait: %v", shell.shellType, err)
 	}
 }
 
