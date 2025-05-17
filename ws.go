@@ -40,6 +40,8 @@ func restyWS(url string) *websocket.Conn {
 		conn, _, err := websocket.Dial(ctx, url, nil)
 		if err == nil {
 			logrus.Infof("websocket connect success")
+			// close limiter
+			conn.SetReadLimit(-1)
 			return conn
 		}
 		logrus.Warnf("websocket connect failed :%v", err.Error())
