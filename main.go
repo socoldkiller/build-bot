@@ -14,9 +14,7 @@ type Session struct {
 func main() {
 
 	cat := NewNapCat(context.Background(), GlobalCfg.URL)
-	msgQueue := &MsgQueue{
-		queue: make(map[Session]chan *NapCatResponse),
-	}
+	msgQueue := &MsgQueue{}
 
 	cmdDisPatcher := NewCommandDisPatcher(cat, msgQueue)
 	cmdDisPatcher.Register("bash", ShellCmd)

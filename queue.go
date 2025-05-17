@@ -3,8 +3,7 @@ package main
 import "sync"
 
 type MsgQueue struct {
-	q     sync.Map
-	queue map[Session]chan *NapCatResponse
+	q sync.Map
 }
 
 func (m *MsgQueue) Store(k Session, v chan *NapCatResponse) {
