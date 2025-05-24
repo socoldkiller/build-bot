@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/coder/websocket"
+	"github.com/sirupsen/logrus"
 	"io"
 	"os/exec"
 	"strings"
@@ -37,8 +38,7 @@ type NapCat struct {
 	ws *Websocket
 }
 
-func NewNapCat(ctx context.Context, url string) *NapCat {
-	ws := NewWebSocket(ctx, url)
+func NewNapCat(ws *Websocket) *NapCat {
 	return &NapCat{
 		ws: ws,
 	}
@@ -50,7 +50,7 @@ type NapCatRequest struct {
 	Echo   string         `json:"echo"`
 }
 
-func (c *NapCat) send(groupID, userID int, rawMessage string) {
+func (c *NapCat) send(groupID, userID int, rawMessage string) error {
 	ctx := context.Background()
 	var action string
 	params := make(map[string]any)
@@ -70,15 +70,20 @@ func (c *NapCat) send(groupID, userID int, rawMessage string) {
 	}
 	jsonData, err := json.Marshal(body)
 	if err != nil {
-		return
+		logrus.Warnf("body(%s) can't marshal,err %s", jsonData, err)
+		return nil
 	}
-	c.ws.Write(ctx, websocket.MessageText, jsonData)
+	return c.ws.Write(ctx, websocket.MessageText, jsonData)
 }
 
 func (c *NapCat) recv(resp *NapCatResponse) error {
-	_, jsonData := c.ws.Read(context.Background())
-	if err := json.Unmarshal(jsonData, resp); err != nil {
+	_, jsonData, err := c.ws.Read(context.Background())
+	if err != nil {
 		return err
+	}
+
+	if err := json.Unmarshal(jsonData, resp); err != nil {
+		return nil
 	}
 	return nil
 }

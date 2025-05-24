@@ -45,13 +45,14 @@ func restyWS(url string) *websocket.Conn {
 	}
 }
 
-func (ws *Websocket) Write(ctx context.Context, typ websocket.MessageType, p []byte) {
-	if err := ws.conn.Write(ctx, typ, p); err != nil {
+func (ws *Websocket) Write(ctx context.Context, typ websocket.MessageType, p []byte) (err error) {
+	if err = ws.conn.Write(ctx, typ, p); err != nil {
 		logrus.Warnf("websocket conn can't write msg:(%s)", string(p))
 	}
+	return err
 }
 
-func (ws *Websocket) Read(ctx context.Context) (websocket.MessageType, []byte) {
+func (ws *Websocket) Read(ctx context.Context) (websocket.MessageType, []byte, error) {
 	var (
 		err  error
 		typ  websocket.MessageType
@@ -61,5 +62,5 @@ func (ws *Websocket) Read(ctx context.Context) (websocket.MessageType, []byte) {
 	if typ, body, err = ws.conn.Read(ctx); err != nil {
 		logrus.Warnf("websocket conn can't read message")
 	}
-	return typ, body
+	return typ, body, err
 }
