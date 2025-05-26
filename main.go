@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"log"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 )
 
 type Session struct {
@@ -60,8 +63,26 @@ func BuildBotLoop(cat *NapCat, msgQueue *MsgQueue, dispatcher *CommandDispatcher
 
 	return err
 }
+func StartZombieReaper(interval time.Duration) {
+	go func() {
+		for {
+			for {
+				var ws syscall.WaitStatus
+				var rusage syscall.Rusage
+
+				pid, err := syscall.Wait4(-1, &ws, syscall.WNOHANG, &rusage)
+				if pid <= 0 || err != nil {
+					break
+				}
+				log.Printf("Reaped zombie process: pid=%d, exit status=%v", pid, ws)
+			}
+			time.Sleep(interval)
+		}
+	}()
+}
 
 func main() {
+	StartZombieReaper(1 * time.Minute)
 	catChan := make(chan *NapCat)
 	failChan := make(chan error, 1)
 	var wg sync.WaitGroup

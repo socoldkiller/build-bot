@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -92,13 +93,22 @@ func (s *Shell) Exec(cmd string) (map[string]string, error) {
 
 func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse, stopChan chan<- error) {
 	killCmd := func() {
-		if err := shell.shell.Process.Kill(); err != nil {
+		defer func() { stopChan <- nil }()
+		var err error
+		if err = shell.shell.Process.Signal(syscall.SIGTERM); err == nil {
+			logrus.Infof("kill shell %s success,pid %d .", shell.shellType, shell.shell.Process.Pid)
+			return
+		}
+
+		waitTimeout := 2 * time.Second
+		time.Sleep(waitTimeout)
+		if err = shell.shell.Process.Kill(); err != nil {
 			logrus.Warnf("kill shell %s failed,pid %d err: %v", shell.shellType, shell.shell.Process.Pid, err)
 		}
-		stopChan <- nil
-	}
-	defer killCmd()
 
+	}
+
+	defer killCmd()
 	for {
 		select {
 		case <-ctx.Done():
