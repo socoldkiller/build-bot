@@ -126,14 +126,22 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 			cmd := msg.Message[0].Data.Text
 			output, err := shell.Exec(cmd)
 			if err != nil {
-				cat.send(msg.GroupID, msg.UserID, err.Error())
+				err := cat.send(msg.GroupID, msg.UserID, err.Error())
+				if err != nil {
+					return
+				}
+
 				continue
 			}
 			resp := CombineOutput(output["stdout"], output["stderr"])
 			if resp == "" {
 				continue
 			}
-			cat.send(msg.GroupID, msg.UserID, resp)
+
+			err = cat.send(msg.GroupID, msg.UserID, resp)
+			if err != nil {
+				return
+			}
 		}
 	}
 
