@@ -23,20 +23,20 @@ func (dr *DelimitedReader) ReadString(delim []byte) (string, error) {
 	var buf []byte
 	b := make([]byte, 1024)
 	for {
-
 		if idx := bytes.Index(buf, delim); idx != -1 {
 			return string(buf[:idx]), nil
 		}
-
 		n, err := dr.Read(b)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-				continue
-			}
+		if n > 0 {
 			buf = append(buf, b[:n]...)
+		}
+		switch err {
+		case io.EOF:
+			return string(buf), nil
+		case nil:
+			continue
+		default:
 			return string(buf), err
 		}
-		buf = append(buf, b[:n]...)
 	}
 }
