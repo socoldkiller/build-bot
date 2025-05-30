@@ -17,7 +17,7 @@ services:
 
 
   build-bot:
-    image: build-bot
+    image: ghcr.io/socoldkiller/build-bot:dev
     container_name: build-bot
     restart: always
     depends_on:
