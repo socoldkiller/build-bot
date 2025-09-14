@@ -80,10 +80,18 @@ func (s *Shell) Close() error {
 func (s *Shell) Exec(cmd string) (map[string]string, error) {
 	fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", cmd, s.delim, s.delim)
 	logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
-	io.WriteString(s.stdin, fullCmd)
+	if _, err := io.WriteString(s.stdin, fullCmd); err != nil {
+		logrus.Warnf("can't write stdin command,err: %s", err)
+		return nil, err
+	}
+	ctx := context.Background()
+	stdoutCtx, stdoutCancel := context.WithTimeout(ctx, 5*time.Minute)
+	stderrCtx, stderrCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer stdoutCancel()
+	defer stderrCancel()
 
-	stdout, err1 := s.stdout.ReadString(s.delim)
-	stderr, err2 := s.stderr.ReadString(s.delim)
+	stdout, err1 := s.stdout.ReadString(stdoutCtx, s.delim)
+	stderr, err2 := s.stderr.ReadString(stderrCtx, s.delim)
 	err := errors.Join(err1, err2)
 	return map[string]string{
 		"stdout": stdout,
