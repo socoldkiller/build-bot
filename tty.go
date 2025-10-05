@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/samber/lo"
-	"github.com/sirupsen/logrus"
 	"io"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/samber/lo"
+	"github.com/sirupsen/logrus"
 )
 
 func CombineOutput(stdout, stderr string) string {
@@ -30,7 +33,17 @@ type Shell struct {
 }
 
 func NewShell(shellType string) (*Shell, error) {
-	delim := []byte("__CMD_DONE__")
+
+	generateRandomDelimiter := func() []byte {
+		b := make([]byte, 24)
+		_, err := rand.Read(b)
+		if err != nil {
+			panic(err)
+		}
+		return []byte(base64.RawURLEncoding.EncodeToString(b))
+	}
+
+	delim := generateRandomDelimiter()
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
 	outReader := NewDelimitedReader(stdoutReader)
