@@ -77,21 +77,15 @@ func (s *Shell) Close() error {
 	return errors.Join(errs...)
 }
 
-func (s *Shell) Exec(cmd string) (map[string]string, error) {
+func (s *Shell) Exec(ctx context.Context, cmd string) (map[string]string, error) {
 	fullCmd := fmt.Sprintf("%s; echo %s; echo %s 1>&2\n", cmd, s.delim, s.delim)
 	logrus.Debugf("full cmd '%s' ", fullCmd[:len(fullCmd)-1])
 	if _, err := io.WriteString(s.stdin, fullCmd); err != nil {
 		logrus.Warnf("can't write stdin command,err: %s", err)
 		return nil, err
 	}
-	ctx := context.Background()
-	stdoutCtx, stdoutCancel := context.WithTimeout(ctx, 5*time.Minute)
-	stderrCtx, stderrCancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer stdoutCancel()
-	defer stderrCancel()
-
-	stdout, err1 := s.stdout.ReadString(stdoutCtx, s.delim)
-	stderr, err2 := s.stderr.ReadString(stderrCtx, s.delim)
+	stdout, err1 := s.stdout.ReadString(ctx, s.delim)
+	stderr, err2 := s.stderr.ReadString(ctx, s.delim)
 	err := errors.Join(err1, err2)
 	return map[string]string{
 		"stdout": stdout,
@@ -132,7 +126,14 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 				return
 			}
 			cmd := msg.Message[0].Data.Text
-			output, err := shell.Exec(cmd)
+
+			shellExec := func(cmd string) (map[string]string, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+				return shell.Exec(ctx, cmd)
+			}
+
+			output, err := shellExec(cmd)
 			if err != nil {
 				err := cat.send(msg.GroupID, msg.UserID, err.Error())
 				if err != nil {
