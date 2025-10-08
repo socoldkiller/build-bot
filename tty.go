@@ -53,6 +53,10 @@ func NewShell(shellType string) (*Shell, error) {
 	stdin, err := execShell.StdinPipe()
 	execShell.Stdout = stdoutWriter
 	execShell.Stderr = stderrWriter
+	execShell.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +144,15 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 	killCmd := func() {
 		defer func() { stopChan <- nil }()
 		var err error
-		if err = shell.shell.Process.Signal(syscall.SIGTERM); err == nil {
+
+		pgid, err := syscall.Getpgid(shell.shell.Process.Pid)
+
+		if err != nil {
+			//TODO
+		}
+
+		fmt.Println(pgid)
+		if err = syscall.Kill(-pgid, syscall.SIGTERM); err == nil {
 			logrus.Infof("kill shell %s success,pid %d .", shell.shellType, shell.shell.Process.Pid)
 			return
 		}
