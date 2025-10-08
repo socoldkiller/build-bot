@@ -110,10 +110,12 @@ func (s *Shell) Exec(ctx context.Context, cmd string) (map[string]string, error)
 
 	asyncRead := func() <-chan []result {
 		var list []result
-		resChan := make(chan []result, 1)
-		list = append(list, readResult(s.stdout))
-		list = append(list, readResult(s.stderr))
-		resChan <- list
+		resChan := make(chan []result)
+		go func() {
+			list = append(list, readResult(s.stdout))
+			list = append(list, readResult(s.stderr))
+			resChan <- list
+		}()
 		return resChan
 	}
 
