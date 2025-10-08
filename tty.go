@@ -151,7 +151,6 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 			//TODO
 		}
 
-		fmt.Println(pgid)
 		if err = syscall.Kill(-pgid, syscall.SIGTERM); err == nil {
 			logrus.Infof("kill shell %s success,pid %d .", shell.shellType, shell.shell.Process.Pid)
 			return
