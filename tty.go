@@ -97,13 +97,41 @@ func (s *Shell) Exec(ctx context.Context, cmd string) (map[string]string, error)
 		logrus.Warnf("can't write stdin command,err: %s", err)
 		return nil, err
 	}
-	stdout, err1 := s.stdout.ReadString(ctx, s.delim)
-	stderr, err2 := s.stderr.ReadString(ctx, s.delim)
-	err := errors.Join(err1, err2)
-	return map[string]string{
-		"stdout": stdout,
-		"stderr": stderr,
-	}, err
+
+	type result struct {
+		out string
+		err error
+	}
+
+	readResult := func(reader *DelimitedReader) result {
+		out, err := reader.ReadString(s.delim)
+		return result{out: out, err: err}
+	}
+
+	asyncRead := func() <-chan []result {
+		var list []result
+		resChan := make(chan []result, 1)
+		list = append(list, readResult(s.stdout))
+		list = append(list, readResult(s.stderr))
+		resChan <- list
+		return resChan
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case list := <-asyncRead():
+		var stdout, stderr result
+		stdout = list[0]
+		stderr = list[1]
+		err := errors.Join(stdout.err, stderr.err)
+		return map[string]string{
+			"stdout": stdout.out,
+			"stderr": stderr.out,
+		}, err
+
+	}
+
 }
 
 func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *NapCatResponse, stopChan chan<- error) {
@@ -147,7 +175,12 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 			}
 
 			output, err := shellExec(cmd)
-			if err != nil {
+
+			switch {
+			case errors.Is(err, context.DeadlineExceeded):
+				cat.send(msg.GroupID, msg.UserID, err.Error())
+				return
+			case !errors.Is(err, nil):
 				err := cat.send(msg.GroupID, msg.UserID, err.Error())
 				if err != nil {
 					return
