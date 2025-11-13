@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Session struct {
@@ -61,6 +64,25 @@ func BuildBotLoop(cat *NapCat, msgQueue *MsgQueue, dispatcher *CommandDispatcher
 	return err
 }
 
+func Healthz() {
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+	})
+	port := "80"
+	server := &http.Server{
+		Addr:         ":" + port,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	logrus.Infof("Server is listening on port: %s", port)
+	if err := server.ListenAndServe(); err != nil {
+		logrus.Errorf("Server stopped: %s", err)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	catChan := make(chan *NapCat)
 	failChan := make(chan error, 1)
@@ -107,6 +129,9 @@ func main() {
 
 	}(context.Background(), catChan, failChan)
 	failChan <- nil
+	wg.Add(1)
+	go Healthz()
+
 	wg.Wait()
 
 }
