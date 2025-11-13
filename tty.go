@@ -191,7 +191,8 @@ func TTyShell(ctx context.Context, shell *Shell, cat *NapCat, msgChan <-chan *Na
 
 			switch {
 			case errors.Is(err, context.DeadlineExceeded):
-				cat.send(msg.GroupID, msg.UserID, err.Error())
+				errMsg := fmt.Sprintf("command: %s:%s", cmd, err.Error())
+				cat.send(msg.GroupID, msg.UserID, errMsg)
 				return
 			case !errors.Is(err, nil):
 				err := cat.send(msg.GroupID, msg.UserID, err.Error())
