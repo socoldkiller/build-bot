@@ -1,6 +1,6 @@
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::{
     io::{AsyncWriteExt, BufReader, Error, ErrorKind},
     process::Command,
@@ -9,8 +9,9 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::tty::chunk::{AsyncReadExt2, Chunk};
+use crate::tty::chunk::{AsyncReadChunk, Chunk};
 use thiserror::Error;
+use tokio::process::{ChildStderr, ChildStdout};
 use tokio::time::sleep;
 
 #[derive(Error, Debug)]
@@ -23,18 +24,18 @@ pub enum TTyError {
 
     #[error("Something went wrong")]
     Other,
+
+    #[error("read timeout")]
+    Timeout,
 }
 
-impl From<TTyError> for std::io::Error {
+impl From<TTyError> for Error {
     fn from(error: TTyError) -> Self {
         match error {
             TTyError::Io(io_error) => io_error,
-            TTyError::InvalidInput(msg) => {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, msg)
-            }
-            TTyError::Other => {
-                std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong")
-            }
+            TTyError::InvalidInput(msg) => Error::new(ErrorKind::InvalidInput, msg),
+            TTyError::Other => Error::new(ErrorKind::Other, "Something went wrong"),
+            TTyError::Timeout => Error::new(ErrorKind::TimedOut, "read timeout"),
         }
     }
 }
@@ -75,11 +76,11 @@ impl TTy {
         let stdout = take_child_io(child.stdout.take(), "stdout")?;
         let stderr = take_child_io(child.stderr.take(), "stderr")?;
         let delim = Uuid::new_v4().to_string();
-        let mut delim_clone = delim.clone();
+        let delim_clone = delim.clone();
         tokio::spawn(async move {
-            let mut stdout_frames = BufReader::new(stdout).chunk(delim_clone.as_mut());
-            let mut stderr_frames = BufReader::new(stderr).chunk(delim_clone.as_mut());
-            let mut read_loop = async move || -> Result<(), Error> {
+            let mut stdout_frames = BufReader::new(stdout).chunk(delim_clone.as_ref());
+            let mut stderr_frames = BufReader::new(stderr).chunk(delim_clone.as_ref());
+            let mut read_loop = async move || -> Result<(), TTyError> {
                 loop {
                     select! {
                         frame = read_frames(&mut stdout_frames) => {
@@ -91,7 +92,7 @@ impl TTy {
                         }
 
                         _ = sleep(Duration::from_mins(5)) => {
-                            return Err(Error::new(ErrorKind::TimedOut, "read timeout"));
+                            return Err(TTyError::Timeout);
                         }
 
 

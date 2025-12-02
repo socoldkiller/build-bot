@@ -86,7 +86,7 @@ impl<R: AsyncRead + Unpin> Chunk<R> {
     }
 }
 
-pub trait AsyncReadExt2: AsyncRead {
+pub trait AsyncReadChunk: AsyncRead {
     fn chunk(self, delim: &str) -> Chunk<Self>
     where
         Self: Sized,
@@ -96,4 +96,4 @@ pub trait AsyncReadExt2: AsyncRead {
     }
 }
 
-impl<T: AsyncRead + ?Sized> AsyncReadExt2 for T {}
+impl<T: AsyncRead + ?Sized> AsyncReadChunk for T {}
