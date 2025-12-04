@@ -1,6 +1,6 @@
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncRead;
 use tokio::{
     io::{AsyncWriteExt, BufReader, Error, ErrorKind},
     process::Command,
@@ -11,7 +11,6 @@ use uuid::Uuid;
 
 use crate::tty::chunk::{AsyncReadChunk, Chunk};
 use thiserror::Error;
-use tokio::process::{ChildStderr, ChildStdout};
 use tokio::time::sleep;
 
 #[derive(Error, Debug)]
@@ -58,11 +57,11 @@ where
 }
 
 impl TTy {
-    pub fn new(cmd: String) -> Result<Self, TTyError> {
+    pub fn new<C: Into<String>>(cmd: C) -> Result<Self, TTyError> {
         let (stdout_tx, stdout_rx) = mpsc::channel(100);
         let (stderr_tx, stderr_rx) = mpsc::channel(100);
 
-        let mut child = Command::new(cmd)
+        let mut child = Command::new(cmd.into())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -80,7 +79,7 @@ impl TTy {
         tokio::spawn(async move {
             let mut stdout_frames = BufReader::new(stdout).chunk(delim_clone.as_ref());
             let mut stderr_frames = BufReader::new(stderr).chunk(delim_clone.as_ref());
-            let mut read_loop = async move || -> Result<(), TTyError> {
+            let mut read_loop = async || -> Result<(), TTyError> {
                 loop {
                     select! {
                         frame = read_frames(&mut stdout_frames) => {
