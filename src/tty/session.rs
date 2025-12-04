@@ -2,21 +2,21 @@ use crate::tty::tty::TTy;
 use dashmap::DashMap;
 use tokio::io;
 
-type UserId = String;
-type Session = TTy;
+pub type UserId = String;
+pub type Session = TTy;
 
-struct SessionManager {
+pub struct SessionManager {
     sessions: DashMap<UserId, Session>,
 }
 
 impl SessionManager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
         }
     }
 
-    async fn get_or_create<S: Into<String>, U: Into<String>>(
+    pub async fn get_or_create<S: Into<String>, U: Into<String>>(
         &self,
         user_id: U,
         tty_type: S,
@@ -29,7 +29,7 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn write_to_user<S: Into<String>, U: Into<String>>(
+    pub async fn write_to_user<S: Into<String>, U: Into<String>>(
         &self,
         user_id: U,
         data: S,
@@ -49,7 +49,7 @@ impl SessionManager {
     }
 
     /// 从指定用户的 tty 读取数据
-    async fn read_from_user<U: Into<String>>(&self, user_id: U) -> Result<String, io::Error> {
+    pub async fn read_from_user<U: Into<String>>(&self, user_id: U) -> Result<String, io::Error> {
         let user_id_str = user_id.into();
 
         match self.sessions.get_mut(&user_id_str) {
@@ -64,7 +64,7 @@ impl SessionManager {
         }
     }
 
-    async fn exec_command<S: Into<String>, U: Into<String>>(
+    pub async fn exec_command<S: Into<String>, U: Into<String>>(
         &self,
         user_id: U,
         command: S,
@@ -171,8 +171,6 @@ mod tests {
     #[tokio::test]
     async fn test_read_from_user_not_found() {
         let manager = SessionManager::new();
-
-        // 尝试从不存在的用户读取数据，应该返回 NotFound 错误
         let result = manager.read_from_user("nonexistent_user").await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::NotFound);

@@ -90,7 +90,7 @@ impl TTy {
                             stderr_tx.send(frame).await.map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
                         }
 
-                        _ = sleep(Duration::from_mins(5)) => {
+                        _ = sleep(Duration::from_secs(300)) => {
                             return Err(TTyError::Timeout);
                         }
 
