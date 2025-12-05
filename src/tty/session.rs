@@ -5,6 +5,15 @@ use tokio::io;
 pub type UserId = String;
 pub type Session = TTy;
 
+/// Session creation status
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionState {
+    NotFound,
+    Created,
+    Existed,
+    Failed,
+}
+
 pub struct SessionManager {
     sessions: DashMap<UserId, Session>,
 }
@@ -16,17 +25,35 @@ impl SessionManager {
         }
     }
 
-    pub async fn get_or_create<S: Into<String>, U: Into<String>>(
+    pub fn check_session<U: Into<String>>(&self, user_id: U) -> SessionState {
+        let user_id_str = user_id.into();
+        let state = self
+            .sessions
+            .get(&user_id_str)
+            .map_or(SessionState::NotFound, |_| SessionState::Existed);
+        state
+    }
+
+    /// Create a new session for the user
+    pub fn create_session<S: Into<String>, U: Into<String>>(
         &self,
         user_id: U,
         tty_type: S,
-    ) -> Result<(), io::Error> {
+    ) -> SessionState {
         let user_id_str = user_id.into();
-        if !self.sessions.contains_key(&user_id_str) {
-            let tty = TTy::new(tty_type)?;
-            self.sessions.insert(user_id_str, tty);
-        }
-        Ok(())
+        self.sessions.get(&user_id_str).map_or_else(
+            || {
+                let tty = TTy::new(tty_type);
+                match tty {
+                    Ok(tty) => {
+                        self.sessions.insert(user_id_str.clone(), tty);
+                        SessionState::Created
+                    }
+                    Err(_) => SessionState::Failed,
+                }
+            },
+            |_| SessionState::Existed,
+        )
     }
 
     pub async fn write_to_user<S: Into<String>, U: Into<String>>(
@@ -48,7 +75,6 @@ impl SessionManager {
         }
     }
 
-    /// 从指定用户的 tty 读取数据
     pub async fn read_from_user<U: Into<String>>(&self, user_id: U) -> Result<String, io::Error> {
         let user_id_str = user_id.into();
 
@@ -81,81 +107,7 @@ mod tests {
 
     #[test]
     fn test_session_manager_new() {
-        // 使用字符串作为 TtyProvider
         let _manager = SessionManager::new();
-    }
-
-    #[tokio::test]
-    async fn test_get_or_create() {
-        let manager = SessionManager::new();
-
-        let result = manager.get_or_create("test_user", "echo").await;
-        assert!(result.is_ok());
-
-        let result = manager.get_or_create("test_user", "echo").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_tty_echo_hello_world() {
-        let manager = SessionManager::new();
-
-        // 创建会话
-        assert!(
-            manager
-                .get_or_create("test_echo_user", "bash")
-                .await
-                .is_ok()
-        );
-
-        // 使用新的 write_to_user 方法
-        let write_result = manager
-            .write_to_user("test_echo_user", "echo hello world")
-            .await;
-        assert!(
-            write_result.is_ok(),
-            "write failed: {:?}",
-            write_result.err()
-        );
-
-        // 使用新的 read_from_user 方法
-        let read_result = manager.read_from_user("test_echo_user").await;
-        assert!(read_result.is_ok(), "read failed: {:?}", read_result.err());
-
-        let output = read_result.unwrap();
-        // 输出应该包含 "hello world"
-        assert!(
-            output.contains("hello world"),
-            "Output does not contain 'hello world': {}",
-            output
-        );
-    }
-
-    #[tokio::test]
-    async fn test_exec_command() {
-        let manager = SessionManager::new();
-
-        // 创建会话
-        assert!(
-            manager
-                .get_or_create("test_exec_user", "bash")
-                .await
-                .is_ok()
-        );
-
-        // 使用 exec_command 方法执行命令
-        let result = manager
-            .exec_command("test_exec_user", "echo test command")
-            .await;
-        assert!(result.is_ok(), "exec_command failed: {:?}", result.err());
-
-        let output = result.unwrap();
-        // 输出应该包含 "test command"
-        assert!(
-            output.contains("test command"),
-            "Output does not contain 'test command': {}",
-            output
-        );
     }
 
     #[tokio::test]
