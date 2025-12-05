@@ -136,7 +136,7 @@ impl WebSocketHandler {
                             self.config.bot_nickname,
                             tty_type
                         );
-                        
+
                         self.to_nap_cat_message(
                             Some(response.group_id),
                             response.user_id,
@@ -184,10 +184,21 @@ impl WebSocketHandler {
                         .await
                         .map_or_else(std::convert::identity, HandleResult::Message),
                     Err(e) => {
-                        let output = format!("({}):goodbye!", response.sender.nickname);
-                        self.to_nap_cat_message(Some(response.group_id), response.user_id, &output)
-                            .await
-                            .map_or_else(std::convert::identity, HandleResult::BrokenPipe)
+                        // Check for broken pipe error
+                        if e.kind() == std::io::ErrorKind::BrokenPipe {
+                            // Remove the broken session so user can create a new one
+                            self.session_manager.remove_session(&session_key);
+                            let output = format!("({}):goodbye! (session removed due to broken pipe)", response.sender.nickname);
+                            self.to_nap_cat_message(Some(response.group_id), response.user_id, &output)
+                                .await
+                                .map_or_else(std::convert::identity, HandleResult::BrokenPipe)
+                        } else {
+                            // Other errors
+                            let output = format!("({}):goodbye!", response.sender.nickname);
+                            self.to_nap_cat_message(Some(response.group_id), response.user_id, &output)
+                                .await
+                                .map_or_else(std::convert::identity, HandleResult::Error)
+                        }
                     }
                 }
             }

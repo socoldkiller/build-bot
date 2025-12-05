@@ -99,7 +99,7 @@ async fn run_napbot_websocket_client(
                     HandleResult::TtyFailed(msg) => {
                         client.send(&msg).await?;
                     }
-                    HandleResult::NotForThisBot(_) =>{
+                    HandleResult::NotForThisBot(msg) =>{
                         // what can I say?
                     }
                     HandleResult::BrokenPipe(msg) => {

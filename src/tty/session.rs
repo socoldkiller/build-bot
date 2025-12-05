@@ -99,6 +99,12 @@ impl SessionManager {
         self.write_to_user(&user_id_str, command).await?;
         self.read_from_user(&user_id_str).await
     }
+
+    /// Remove a session for a user
+    pub fn remove_session<U: Into<String>>(&self, user_id: U) -> bool {
+        let user_id_str = user_id.into();
+        self.sessions.remove(&user_id_str).is_some()
+    }
 }
 
 #[cfg(test)]
