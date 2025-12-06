@@ -11,9 +11,13 @@ dashmap = "6.1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 pretty_assertions = "1.4.1"
-tokio-tungstenite = "0.24"
-tungstenite = "0.22"
+tokio-tungstenite = "0.28.0"
+tungstenite = "0.28.0"
 futures-util = { version = "0.3", default-features = false }
 url = "2.5"
 clap = { version = "4.5", features = ["derive"] }
-toml = "0.8"
+toml = "0.9.8"
+lazy_static = "1.4"
+
+[build-dependencies]
+chrono = "0.4"

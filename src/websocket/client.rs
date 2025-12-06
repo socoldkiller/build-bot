@@ -3,6 +3,8 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use thiserror::Error;
+use tungstenite::Utf8Bytes;
+
 #[derive(Error, Debug)]
 pub enum WebSocketClientError {
     #[error("IO error: {0}")]
@@ -35,14 +37,14 @@ impl WebSocketClient {
 
     pub async fn send(&mut self, message: &str) -> Result<(), WebSocketClientError> {
         self.ws_stream
-            .send(Message::Text(message.to_string()))
+            .send(Message::Text(Utf8Bytes::from(message.to_string())))
             .await?;
         Ok(())
     }
 
     pub async fn recv(&mut self) -> Result<String, WebSocketClientError> {
         match self.ws_stream.next().await {
-            Some(Ok(Message::Text(text))) => Ok(text),
+            Some(Ok(Message::Text(text))) => Ok(text.parse().unwrap()),
             Some(Ok(Message::Close(_))) => Err(WebSocketClientError::ConnectionClosed),
             Some(Err(e)) => Err(WebSocketClientError::WebSocket(e)),
             None => Err(WebSocketClientError::ConnectionClosed),

@@ -1,6 +1,7 @@
 mod config;
 mod napbot;
 mod tty;
+mod version;
 mod websocket;
 
 use crate::config::{CliArgs, Config};
@@ -90,7 +91,7 @@ async fn run_napbot_websocket_client(
         match client.recv().await {
             Ok(message) => {
                 match handler.handle_message(&message).await {
-                    HandleResult::Error(e) => {
+                    HandleResult::Error(_e) => {
                     }
 
                     HandleResult::Message(msg) => {
@@ -99,10 +100,13 @@ async fn run_napbot_websocket_client(
                     HandleResult::TtyFailed(msg) => {
                         client.send(&msg).await?;
                     }
-                    HandleResult::NotForThisBot(msg) =>{
+                    HandleResult::NotForThisBot(_msg) =>{
                         // what can I say?
                     }
                     HandleResult::BrokenPipe(msg) => {
+                        client.send(&msg).await?;
+                    },
+                    HandleResult::CreateTty(msg) => {
                         client.send(&msg).await?;
                     },
                 }
