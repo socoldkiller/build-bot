@@ -52,7 +52,7 @@ where
 {
     match chunk_block.next_delim().await {
         Ok(Some(chunk)) => Some(chunk),
-        Ok(None) => None, // EOF
+        Ok(None) => None,                 // EOF
         Err(_) => Some(String::from("")), // Error, return empty string
     }
 }
@@ -106,7 +106,7 @@ impl TTy {
                             }
                         }
 
-                        _ = sleep(Duration::from_millis(5)) => {
+                        _ = sleep(Duration::from_mins(5)) => {
                             return Err(TTyError::Timeout);
                         }
                     }
@@ -135,22 +135,22 @@ impl TTy {
         Ok(())
     }
 
-pub async fn read(&mut self) -> Result<String, Error> {
-    let stdout = self
-        .stdout_rx
-        .recv()
-        .await
-        .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
+    pub async fn read(&mut self) -> Result<String, Error> {
+        let stdout = self
+            .stdout_rx
+            .recv()
+            .await
+            .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
 
-    let stderr = self
-        .stderr_rx
-        .recv()
-        .await
-        .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
+        let stderr = self
+            .stderr_rx
+            .recv()
+            .await
+            .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
 
-    let output = format!("{}{}", stdout, stderr);
-    Ok(output.trim().to_string())
-}
+        let output = format!("{}{}", stdout, stderr);
+        Ok(output.trim().to_string())
+    }
 }
 
 #[cfg(test)]
