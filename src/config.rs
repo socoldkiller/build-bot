@@ -16,26 +16,13 @@ pub struct Config {
     /// Bot nickname for command matching (e.g., "bff")
     #[serde(default = "default_bot_nickname")]
     pub bot_nickname: String,
-    
-    /// Reconnection settings
-    pub reconnect: Option<ReconnectConfig>,
+
 }
 
 fn default_bot_nickname() -> String {
     "bff".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReconnectConfig {
-    /// Maximum number of reconnection attempts
-    pub max_attempts: Option<u32>,
-    
-    /// Delay between reconnection attempts in seconds
-    pub delay_seconds: Option<u64>,
-    
-    /// Exponential backoff factor
-    pub backoff_factor: Option<f64>,
-}
 
 impl Default for Config {
     fn default() -> Self {
@@ -44,20 +31,10 @@ impl Default for Config {
             access_token: None,
             log_level: Some(String::from("info")),
             bot_nickname: default_bot_nickname(),
-            reconnect: Some(ReconnectConfig::default()),
         }
     }
 }
 
-impl Default for ReconnectConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: Some(5),
-            delay_seconds: Some(5),
-            backoff_factor: Some(1.5),
-        }
-    }
-}
 
 impl Config {
     /// Load configuration from a file

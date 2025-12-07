@@ -46,13 +46,14 @@ pub struct TTy {
     delim: String,
 }
 
-async fn read_frames<R>(chunk_block: &mut Chunk<BufReader<R>>) -> String
+async fn read_frames<R>(chunk_block: &mut Chunk<BufReader<R>>) -> Option<String>
 where
     R: AsyncRead + Unpin,
 {
     match chunk_block.next_delim().await {
-        Ok(Some(chunk)) => chunk,
-        _ => String::from(""),
+        Ok(Some(chunk)) => Some(chunk),
+        Ok(None) => None, // EOF
+        Err(_) => Some(String::from("")), // Error, return empty string
     }
 }
 
@@ -83,18 +84,31 @@ impl TTy {
                 loop {
                     select! {
                         frame = read_frames(&mut stdout_frames) => {
-                            stdout_tx.send(frame).await.map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
+                            match frame {
+                                Some(frame_str) => {
+                                    stdout_tx.send(frame_str).await.map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
+                                }
+                                None => {
+                                    return Ok(());
+                                }
+                            }
                         }
 
                         frame = read_frames(&mut stderr_frames) => {
-                            stderr_tx.send(frame).await.map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
+
+                            match frame {
+                                Some(frame_str) => {
+                                    stderr_tx.send(frame_str).await.map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
+                                }
+                                None => {
+                                    return Ok(());
+                                }
+                            }
                         }
 
-                        _ = sleep(Duration::from_secs(300)) => {
+                        _ = sleep(Duration::from_millis(5)) => {
                             return Err(TTyError::Timeout);
                         }
-
-
                     }
                 }
             };
@@ -121,22 +135,22 @@ impl TTy {
         Ok(())
     }
 
-    pub async fn read(&mut self) -> Result<String, Error> {
-        let stdout = self
-            .stdout_rx
-            .recv()
-            .await
-            .ok_or_else(|| Error::new(ErrorKind::Other, "broken pipe"))?;
+pub async fn read(&mut self) -> Result<String, Error> {
+    let stdout = self
+        .stdout_rx
+        .recv()
+        .await
+        .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
 
-        let stderr = self
-            .stderr_rx
-            .recv()
-            .await
-            .ok_or_else(|| Error::new(ErrorKind::Other, "broken pipe"))?;
+    let stderr = self
+        .stderr_rx
+        .recv()
+        .await
+        .ok_or_else(|| Error::new(ErrorKind::BrokenPipe, "broken pipe"))?;
 
-        let output = format!("{}{}", stdout, stderr);
-        Ok(output.trim().to_string())
-    }
+    let output = format!("{}{}", stdout, stderr);
+    Ok(output.trim().to_string())
+}
 }
 
 #[cfg(test)]

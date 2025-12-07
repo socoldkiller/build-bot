@@ -21,7 +21,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/build-bot /app/build-bot
 
 
-ENTRYPOINT ["/app/build-bot"]
-
-# Default command
 CMD ["/app/build-bot","-f","config.toml"]

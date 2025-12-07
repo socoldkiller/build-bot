@@ -7,6 +7,8 @@ mod websocket;
 use crate::config::{CliArgs, Config};
 use crate::websocket::{HandleResult, WebSocketClient, WebSocketHandler};
 use clap::Parser;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,29 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let config = Config::from_cli_args(&args);
-
-    if args.show_config {
-        println!("Current configuration:");
-        println!("WebSocket URL: {}", config.websocket_url);
-        println!(
-            "Access token: {}",
-            config.access_token.as_deref().unwrap_or("None")
-        );
-        println!(
-            "Log level: {}",
-            config.log_level.as_deref().unwrap_or("info")
-        );
-        if let Some(reconnect) = &config.reconnect {
-            println!("Reconnect settings:");
-            println!("  Max attempts: {}", reconnect.max_attempts.unwrap_or(5));
-            println!("  Delay seconds: {}", reconnect.delay_seconds.unwrap_or(5));
-            println!(
-                "  Backoff factor: {}",
-                reconnect.backoff_factor.unwrap_or(1.5)
-            );
-        }
-        return Ok(());
-    }
 
     let url = build_websocket_url(&config);
 
@@ -71,82 +50,27 @@ async fn run_napbot_websocket_client(
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
     setup_logging(config);
-
     println!("Connecting to: {}", url);
-    let mut client = WebSocketClient::connect(url).await?;
-
-    let handler = WebSocketHandler::new(config.clone());
+    let c = Arc::new(Mutex::new(WebSocketClient::connect(url).await?));
+    let cloned_c = Arc::clone(&c);
+    let handler = WebSocketHandler::new(config.clone(), c);
     println!("Connected! Waiting for NapCatResponse messages...");
     println!("Press Ctrl+C to exit.");
 
-    let max_attempts = config
-        .reconnect
-        .as_ref()
-        .and_then(|r| r.max_attempts)
-        .unwrap_or(5);
-
-    let mut attempt = 0;
-
     loop {
-        match client.recv().await {
-            Ok(message) => {
-                match handler.handle_message(&message).await {
-                    HandleResult::Error(_e) => {
-                    }
-
-                    HandleResult::Message(msg) => {
-                        client.send(&msg).await?;
-                    }
-                    HandleResult::TtyFailed(msg) => {
-                        client.send(&msg).await?;
-                    }
-                    HandleResult::NotForThisBot(_msg) =>{
-                        // what can I say?
-                    }
-                    HandleResult::BrokenPipe(msg) => {
-                        client.send(&msg).await?;
-                    },
-                    HandleResult::CreateTty(msg) => {
-                        client.send(&msg).await?;
-                    },
-                }
-
-                attempt = 0;
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                attempt += 1;
-
-                if attempt >= max_attempts {
-                    eprintln!(
-                        "Max reconnection attempts ({}) reached. Exiting.",
-                        max_attempts
-                    );
-                    break;
-                }
-
-                let delay = calculate_reconnect_delay(attempt, config);
-                eprintln!(
-                    "Attempting to reconnect in {} seconds (attempt {}/{})...",
-                    delay, attempt, max_attempts
-                );
-                tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
-
-                match WebSocketClient::connect(url).await {
-                    Ok(new_client) => {
-                        client = new_client;
-                        println!("Reconnected successfully!");
-                    }
-                    Err(e) => {
-                        eprintln!("Reconnection failed: {}", e);
-                    }
-                }
-            }
+        let resp = handler.recv_message().await;
+        let op = handler.send_message(resp).await;
+        match op {
+            HandleResult::SendError => break,
+            _ => {}
         }
     }
 
-    client.close().await?;
-    println!("Disconnected");
+    match cloned_c.lock().await.close().await {
+        Ok(_) => println!("Disconnected"),
+        Err(e) => println!("Error: {}", e)
+    }
+
     Ok(())
 }
 
@@ -160,20 +84,4 @@ fn setup_logging(config: &Config) {
         "error" => println!("Log level set to: ERROR"),
         _ => println!("Log level set to: INFO (default)"),
     }
-}
-
-fn calculate_reconnect_delay(attempt: u32, config: &Config) -> u64 {
-    let base_delay = config
-        .reconnect
-        .as_ref()
-        .and_then(|r| r.delay_seconds)
-        .unwrap_or(5);
-
-    let backoff_factor = config
-        .reconnect
-        .as_ref()
-        .and_then(|r| r.backoff_factor)
-        .unwrap_or(1.5);
-
-    (base_delay as f64 * backoff_factor.powi(attempt as i32 - 1)) as u64
 }

@@ -60,6 +60,16 @@ impl WebSocketClient {
 
 }
 
+impl crate::websocket::handler::WebSocket for WebSocketClient {
+    async fn send(&mut self, message: &str) -> Result<(), WebSocketClientError> {
+        self.send(message).await
+    }
+
+    async fn recv(&mut self) -> Result<String, WebSocketClientError> {
+        self.recv().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
