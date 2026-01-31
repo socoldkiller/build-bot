@@ -103,14 +103,14 @@ pub struct BotTTy {
     delim: String,
 }
 
-async fn read_frames<R>(chunk_block: &mut Chunk<BufReader<R>>) -> Option<String>
+async fn read_frames<R>(chunk_block: &mut Chunk<BufReader<R>>) -> Result<Option<String>, Error>
 where
     R: AsyncRead + Unpin,
 {
     match chunk_block.next_delim().await {
-        Ok(Some(chunk)) => Some(chunk.trim().to_owned()),
-        Ok(None) => None,                 // EOF
-        Err(_) => Some(String::from("")), // Error, return empty string
+        Ok(Some(chunk)) => Ok(Some(chunk.trim().to_owned())),
+        Ok(None) => Ok(None), // EOF
+        Err(e) => Err(e),
     }
 }
 
@@ -156,26 +156,26 @@ impl BotTTy {
                         }
 
                         frame = read_frames(&mut stdout_frames) => {
-                            match frame {
+                            match frame? {
                                 Some(frame_str) => {
                                     stdout_tx.send(frame_str).await
                                         .map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
                                 }
                                 None => {
-                                    sleep(Duration::from_millis(100)).await;
-                                },
+                                   return Err(TTyError::Other);
+                                }
                             }
                         }
 
                         frame = read_frames(&mut stderr_frames) => {
-                            match frame {
+                            match frame? {
                                 Some(frame_str) => {
                                     stderr_tx.send(frame_str).await
                                         .map_err(|_| Error::new(ErrorKind::Other, "channel closed"))?;
                                 }
-                                None =>{
-                                    sleep(Duration::from_millis(100)).await;
-                                },
+                                None => {
+                                   return Err(TTyError::Other);
+                                }
                             }
                         }
 

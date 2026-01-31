@@ -8,19 +8,38 @@ use serde::Serialize;
 use serde_json;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::Mutex;
 
 /// Result of handling a message
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum HandleResult {
+    #[error("create tty failed: {0}")]
     CreateTty(String),
+
+    #[error("message: {0}")]
     Message(String),
+
+    #[error("error: {0}")]
     Error(String),
+
+    #[error("not for this bot: {0}")]
     NotForThisBot(String),
+
+    #[error("tty failed: {0}")]
     TtyFailed(String),
+
+    #[error("broken pipe: {0}")]
     BrokenPipe(String),
+
+    #[error("send error")]
     SendError,
+
+    #[error("receive error")]
     ReceiveError,
+
+    #[error("invalid response")]
+    InvalidResponse(#[from] serde_json::Error),
 }
 
 pub trait WebSocket {
@@ -91,9 +110,9 @@ where
         let request = NapCatRequest {
             action: action.to_string(),
             params,
-            echo: None,
+            echo: Some("false".to_string()),
         };
-        serde_json::to_string(&request).map_err(|e| HandleResult::Error(e.to_string()))
+        serde_json::to_string(&request).map_err(HandleResult::from)
     }
 
     pub async fn handle_message(&self, message: &str) -> HandleResult {
@@ -136,7 +155,7 @@ where
             | HandleResult::TtyFailed(msg)
             | HandleResult::BrokenPipe(msg)
             | HandleResult::CreateTty(msg) => async_send_response(msg).await,
-            HandleResult::Error(msg) => async_send_response(msg).await,
+            HandleResult::InvalidResponse(e) => HandleResult::InvalidResponse(e),
             HandleResult::NotForThisBot(_m) => HandleResult::NotForThisBot(_m),
             _ => response,
         }
@@ -150,13 +169,16 @@ where
     }
 
     pub async fn handle_response(&self, response: &NapCatResponse) -> HandleResult {
+        if response.user_id == 0 || response.user_id == response.self_id {
+            return HandleResult::NotForThisBot("send to self".to_string());
+        }
         let session_key = format!("{}_{}", response.group_id, response.user_id);
         match self.session_manager.check_session(&session_key) {
             SessionState::NotFound => {
                 let command_text = if let Some(message) = response.message.first() {
                     message.data.text.trim().to_string()
                 } else {
-                    return HandleResult::Error("No message in NapCatResponse".to_string());
+                    return HandleResult::NotForThisBot("No message in NapCatResponse".to_string());
                 };
 
                 let (bot_name, _, tty_type) = match self.parse_command(&command_text) {
@@ -229,7 +251,7 @@ where
                     Err(_e) => {
                         // Always remove session on any error, as TTY is likely unusable
                         self.session_manager.remove_session(&session_key);
-                        
+
                         let output = format!("({}): bye bye~ ✨👋", response.sender.nickname);
                         self.to_nap_cat_message(Some(response.group_id), response.user_id, &output)
                             .await

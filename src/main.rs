@@ -59,6 +59,16 @@ async fn run_napbot_websocket_client(
 
     loop {
         let resp = handler.recv_message().await;
+
+        if let HandleResult::NotForThisBot(e) = resp {
+            continue;
+        }
+
+        if let HandleResult::Error(e) = resp {
+            continue;
+        }
+
+        println!("Received response: {:?}", resp);
         let op = handler.send_message(resp).await;
         match op {
             HandleResult::SendError => break,
@@ -68,7 +78,7 @@ async fn run_napbot_websocket_client(
 
     match cloned_c.lock().await.close().await {
         Ok(_) => println!("Disconnected"),
-        Err(e) => println!("Error: {}", e)
+        Err(e) => println!("Error: {}", e),
     }
 
     Ok(())
