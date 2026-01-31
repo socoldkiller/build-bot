@@ -1,9 +1,9 @@
-use crate::tty::tty::TTy;
+use crate::tty::tty::BotTTy;
 use dashmap::DashMap;
 use tokio::io;
 
 pub type UserId = String;
-pub type Session = TTy;
+pub type Session = BotTTy;
 
 /// Session creation status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ impl SessionManager {
         let user_id_str = user_id.into();
         self.sessions.get(&user_id_str).map_or_else(
             || {
-                let tty = TTy::new(tty_type);
+                let tty = BotTTy::new(tty_type);
                 match tty {
                     Ok(tty) => {
                         self.sessions.insert(user_id_str.clone(), tty);
