@@ -231,14 +231,16 @@ where
             }
 
             SessionState::Existed => {
-                let command = response
-                    .message
-                    .first()
-                    .unwrap()
-                    .data
-                    .text
-                    .trim()
-                    .to_string();
+                let mut command: String;
+                match response.message.first() {
+                    None => {
+                        return HandleResult::NotForThisBot(
+                            "no message in NapCatResponse".to_string(),
+                        );
+                    }
+                    Some(msg) => command = msg.data.text.trim().to_string(),
+                }
+
                 match self
                     .session_manager
                     .exec_command(&session_key, &command)
@@ -249,9 +251,7 @@ where
                         .await
                         .map_or_else(std::convert::identity, HandleResult::Message),
                     Err(_e) => {
-                        // Always remove session on any error, as TTY is likely unusable
                         self.session_manager.remove_session(&session_key);
-
                         let output = format!("({}): bye bye~ ✨👋", response.sender.nickname);
                         self.to_nap_cat_message(Some(response.group_id), response.user_id, &output)
                             .await
